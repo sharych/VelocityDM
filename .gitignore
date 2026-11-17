@@ -1,0 +1,16 @@
+# .NET build artifacts
+bin/
+obj/
+publish/
+TestResults/
+*.user
+*.suo
+*.cache
+.vs/
+.vscode/
+
+# OS / temp files
+Thumbs.db
+.DS_Store
+*.tmp
+*.log

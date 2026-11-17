@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>VelocityDM.App</RootNamespace>
+    <AssemblyName>VelocityDM</AssemblyName>
+    <ApplicationIcon>Assets\VelocityDM.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\VelocityDM.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\VelocityDM.Core\VelocityDM.Core.csproj" />
+  </ItemGroup>
+
+</Project>

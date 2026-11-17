@@ -1,0 +1,75 @@
+namespace VelocityDM.Core.Models;
+
+/// <summary>
+/// Persistent application settings for VelocityDM.
+/// </summary>
+public sealed class AppSettings
+{
+    public string DefaultDownloadDirectory { get; set; } = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+        "Downloads",
+        "VelocityDM");
+
+    public bool CategorizeIntoSubfolders { get; set; } = true;
+
+    public int DefaultConnectionsPerDownload { get; set; } = 8;
+
+    public int MaxConcurrentDownloads { get; set; } = 3;
+
+    /// <summary>
+    /// Global download bandwidth cap in bytes/sec. Zero means unlimited.
+    /// </summary>
+    public long GlobalSpeedLimitBytesPerSec { get; set; } = 0;
+
+    public bool ClipboardMonitoringEnabled { get; set; } = true;
+
+    /// <summary>
+    /// When true, clipboard watcher prompts on known downloadable file extensions;
+    /// when false, prompts on any HTTP/HTTPS URL copied to clipboard.
+    /// </summary>
+    public bool ClipboardOnlyKnownFileExtensions { get; set; } = true;
+
+    public bool AutoStartQueuedDownloads { get; set; } = true;
+
+    public int MaxRetriesPerSegment { get; set; } = 5;
+
+    public int BufferSizeBytes { get; set; } = 65536;
+
+    public int RequestTimeoutSeconds { get; set; } = 30;
+
+    public string UserAgent { get; set; } = "VelocityDM/1.0 (Windows NT; Multi-Segment)";
+
+    public AppSettings Clone() => new()
+    {
+        DefaultDownloadDirectory = DefaultDownloadDirectory,
+        CategorizeIntoSubfolders = CategorizeIntoSubfolders,
+        DefaultConnectionsPerDownload = DefaultConnectionsPerDownload,
+        MaxConcurrentDownloads = MaxConcurrentDownloads,
+        GlobalSpeedLimitBytesPerSec = GlobalSpeedLimitBytesPerSec,
+        ClipboardMonitoringEnabled = ClipboardMonitoringEnabled,
+        ClipboardOnlyKnownFileExtensions = ClipboardOnlyKnownFileExtensions,
+        AutoStartQueuedDownloads = AutoStartQueuedDownloads,
+        MaxRetriesPerSegment = MaxRetriesPerSegment,
+        BufferSizeBytes = BufferSizeBytes,
+        RequestTimeoutSeconds = RequestTimeoutSeconds,
+        UserAgent = UserAgent
+    };
+
+    public void Normalize()
+    {
+        if (string.IsNullOrWhiteSpace(DefaultDownloadDirectory))
+        {
+            DefaultDownloadDirectory = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                "Downloads",
+                "VelocityDM");
+        }
+
+        DefaultConnectionsPerDownload = Math.Clamp(DefaultConnectionsPerDownload, 1, 32);
+        MaxConcurrentDownloads = Math.Clamp(MaxConcurrentDownloads, 1, 16);
+        GlobalSpeedLimitBytesPerSec = Math.Max(0, GlobalSpeedLimitBytesPerSec);
+        MaxRetriesPerSegment = Math.Clamp(MaxRetriesPerSegment, 0, 20);
+        BufferSizeBytes = Math.Clamp(BufferSizeBytes, 8192, 1024 * 1024);
+        RequestTimeoutSeconds = Math.Clamp(RequestTimeoutSeconds, 5, 300);
+    }
+}
