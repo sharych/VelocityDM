@@ -1,7 +1,5 @@
 using System.Collections.ObjectModel;
 using System.Windows.Media;
-using MonoTorrent;
-using MonoTorrent.Client;
 using VelocityDM.App.Helpers;
 using VelocityDM.Core.Models;
 
@@ -13,7 +11,7 @@ public sealed class TorrentFileViewModel : ObservableObject
     private string _fullPath = string.Empty;
     private string _sizeText = string.Empty;
     private double _progressPercent;
-    private Priority _priority;
+    private TorrentPriority _priority;
 
     public string Path { get => _path; private set => SetProperty(ref _path, value); }
     public string FullPath { get => _fullPath; private set => SetProperty(ref _fullPath, value); }
@@ -31,7 +29,7 @@ public sealed class TorrentFileViewModel : ObservableObject
 
     public string ProgressText => $"{ProgressPercent:0.0}%";
 
-    public Priority Priority
+    public TorrentPriority Priority
     {
         get => _priority;
         private set
@@ -65,7 +63,7 @@ public sealed class TorrentItemViewModel : ObservableObject
     private string _infoHashHex = string.Empty;
     private string? _magnetUri;
     private string _saveDirectory = string.Empty;
-    private TorrentState _state;
+    private TorrentDownloadState _state;
     private string _statusDisplay = string.Empty;
     private Brush _statusBrush = PausedBrush;
     private double _progressPercent;
@@ -96,7 +94,7 @@ public sealed class TorrentItemViewModel : ObservableObject
     public string InfoHashHex { get => _infoHashHex; private set => SetProperty(ref _infoHashHex, value); }
     public string? MagnetUri { get => _magnetUri; private set => SetProperty(ref _magnetUri, value); }
     public string SaveDirectory { get => _saveDirectory; private set => SetProperty(ref _saveDirectory, value); }
-    public TorrentState State { get => _state; private set => SetProperty(ref _state, value); }
+    public TorrentDownloadState State { get => _state; private set => SetProperty(ref _state, value); }
     public bool IsPaused { get => _isPaused; private set => SetProperty(ref _isPaused, value); }
     public string StatusDisplay { get => _statusDisplay; private set => SetProperty(ref _statusDisplay, value); }
     public Brush StatusBrush { get => _statusBrush; private set => SetProperty(ref _statusBrush, value); }
@@ -149,22 +147,22 @@ public sealed class TorrentItemViewModel : ObservableObject
 
         StatusDisplay = snap.State switch
         {
-            TorrentState.Downloading => "Downloading",
-            TorrentState.Seeding => "Seeding",
-            TorrentState.Metadata => "Metadata...",
-            TorrentState.Hashing or TorrentState.FetchingHashes => "Hashing...",
-            TorrentState.Paused => "Paused",
-            TorrentState.Stopped => "Stopped",
-            TorrentState.Error => "Error",
+            TorrentDownloadState.Downloading => "Downloading",
+            TorrentDownloadState.Seeding => "Seeding",
+            TorrentDownloadState.Metadata => "Metadata...",
+            TorrentDownloadState.Hashing => "Hashing...",
+            TorrentDownloadState.Paused => "Paused",
+            TorrentDownloadState.Stopped => "Stopped",
+            TorrentDownloadState.Error => "Error",
             _ => snap.State.ToString()
         };
 
         StatusBrush = snap.State switch
         {
-            TorrentState.Downloading => DownloadingBrush,
-            TorrentState.Seeding => SeedingBrush,
-            TorrentState.Metadata or TorrentState.Hashing or TorrentState.FetchingHashes => MetadataBrush,
-            TorrentState.Error => ErrorBrush,
+            TorrentDownloadState.Downloading => DownloadingBrush,
+            TorrentDownloadState.Seeding => SeedingBrush,
+            TorrentDownloadState.Metadata or TorrentDownloadState.Hashing => MetadataBrush,
+            TorrentDownloadState.Error => ErrorBrush,
             _ => PausedBrush
         };
 

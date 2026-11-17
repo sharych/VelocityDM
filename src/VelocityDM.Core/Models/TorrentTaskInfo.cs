@@ -1,7 +1,30 @@
-using MonoTorrent;
-using MonoTorrent.Client;
-
 namespace VelocityDM.Core.Models;
+
+/// <summary>
+/// Download priority for an individual file inside a torrent.
+/// Matches libtorrent file priority levels.
+/// </summary>
+public enum TorrentPriority
+{
+    DoNotDownload = 0,
+    Low = 1,
+    Normal = 2,
+    High = 3
+}
+
+/// <summary>
+/// Normalized lifecycle state for a torrent entry.
+/// </summary>
+public enum TorrentDownloadState
+{
+    Stopped,
+    Paused,
+    Metadata,
+    Hashing,
+    Downloading,
+    Seeding,
+    Error
+}
 
 /// <summary>
 /// Persisted torrent entry stored in torrents.json across restarts.
@@ -13,6 +36,7 @@ public sealed class TorrentRecord
     public string InfoHashHex { get; set; } = string.Empty;
     public string? MagnetUri { get; set; }
     public string? CachedTorrentFilePath { get; set; }
+    public string? ResumeDataFilePath { get; set; }
     public string SaveDirectory { get; set; } = string.Empty;
     public bool Sequential { get; set; }
     public bool IsPaused { get; set; }
@@ -25,7 +49,7 @@ public sealed class TorrentFileSnapshot
     public required string FullPath { get; init; }
     public long Length { get; init; }
     public double ProgressPercent { get; init; }
-    public Priority Priority { get; init; }
+    public TorrentPriority Priority { get; init; }
 }
 
 public sealed class TorrentStatusSnapshot
@@ -35,7 +59,7 @@ public sealed class TorrentStatusSnapshot
     public string InfoHashHex { get; init; } = string.Empty;
     public string? MagnetUri { get; init; }
     public string SaveDirectory { get; init; } = string.Empty;
-    public TorrentState State { get; init; }
+    public TorrentDownloadState State { get; init; }
     public bool IsPaused { get; init; }
     public bool Sequential { get; init; }
     public double ProgressPercent { get; init; }

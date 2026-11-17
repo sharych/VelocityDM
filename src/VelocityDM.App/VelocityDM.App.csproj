@@ -11,6 +11,7 @@
     <AssemblyName>VelocityDM</AssemblyName>
     <ApplicationIcon>Assets\VelocityDM.ico</ApplicationIcon>
     <StartupObject>VelocityDM.App.Program</StartupObject>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
   </PropertyGroup>
 
   <ItemGroup>

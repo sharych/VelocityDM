@@ -8,7 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="MonoTorrent" Version="3.0.2" />
+    <PackageReference Include="LibtorrentSharp" Version="0.1.0-alpha" />
   </ItemGroup>
 
 </Project>

@@ -36,9 +36,9 @@ Manage `.torrent` files and `magnet:?` links with DHT, PEX, sequential streaming
 
 ## Features
 - **Multi-Segment Parallel HTTP Downloads (1–32 Connections)**: Splits byte-range-capable downloads into contiguous byte slices written concurrently via `RandomAccess.WriteAsync` into `.vdm.part` files (zero end-of-download merge step), with automatic fallback to single-stream mode when servers ignore `Range` headers or omit `Content-Length`.
-- **BitTorrent & Magnet Section (powered by MonoTorrent)**:
+- **BitTorrent & Magnet Section (powered by `libtorrent-rasterbar` via LibtorrentSharp — same open-source C++ engine as qBittorrent)**:
   - Add `.torrent` files or `magnet:?xt=urn:btih:...` links (including from clipboard).
-  - Supports DHT, Peer Exchange (PEX), Local Peer Discovery, fast-resume persistence, sequential piece ordering, per-file download priorities (`High`, `Normal`, `Low`, `DoNotDownload`), UL/DL rate limits, and optional auto-stop seeding at 100%.
+  - Supports **uTP (BEP-29) & TCP**, DHT, Peer Exchange (PEX), Local Peer Discovery (LSD), parallel multi-tier tracker announces, **automatic existing-binary hash verification & resume** (matching qBittorrent's check-and-resume workflow plus manual **Force Recheck**), fast-resume persistence, sequential piece ordering, per-file download priorities (`High`, `Normal`, `Low`, `DoNotDownload`), UL/DL rate limits, and optional auto-stop seeding at 100%.
 - **Background System Tray Mode (IDM-style)**:
   - Closing the window hides VelocityDM to the Windows System Tray so active HTTP downloads, torrents, clipboard monitor, and the Chrome bridge keep running in the background.
   - Enforces single-instance execution via Mutex + Named Pipe IPC and supports optional Windows startup (`--minimized`).
@@ -54,7 +54,7 @@ Manage `.torrent` files and `magnet:?` links with DHT, PEX, sequential streaming
 
 Download the latest release from **[GitHub Releases](https://github.com/sharych/VelocityDM/releases)**:
 
-1. **Windows Installer (`VelocityDM-Setup-v2.0.0.exe`)** *(Recommended)*
+1. **Windows Installer (`VelocityDM-Setup-v2.1.0.exe`)** *(Recommended)*
    - Installs cleanly into `%LocalAppData%\Programs\VelocityDM` with Start Menu / Desktop shortcuts and a Windows Apps & Features uninstaller.
    - Includes a setup checkbox to automatically download & install **Microsoft .NET 8.0 Desktop Runtime (x64)** if it is not already present on your PC.
    - Optionally registers Chrome/Edge Native Messaging, Windows startup, and `.torrent` / `magnet:` associations.

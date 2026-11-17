@@ -4,8 +4,6 @@ using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Data;
-using MonoTorrent;
-using MonoTorrent.Client;
 using VelocityDM.App.Helpers;
 using VelocityDM.Core.Models;
 using VelocityDM.Core.Services;
@@ -323,6 +321,13 @@ public sealed class MainViewModel : ObservableObject
             await _manager.RemoveAsync(SelectedItem.Id, deleteFiles);
     }
 
+    public async Task ForceRecheckSelectedTorrentAsync()
+    {
+        if (SelectedTorrent == null) return;
+        await _torrentManager.ForceRecheckAsync(SelectedTorrent.Id);
+        StatusMessage = $"Hash-checking existing files for {SelectedTorrent.Name}...";
+    }
+
     public async Task MoveSelectedAsync(int delta)
     {
         if (SelectedItem == null) return;
@@ -560,9 +565,9 @@ public sealed class MainViewModel : ObservableObject
         {
             torrentDlSpeed += t.RawDownloadSpeed;
             torrentUlSpeed += t.RawUploadSpeed;
-            if (t.State is TorrentState.Downloading or TorrentState.Metadata or TorrentState.Hashing or TorrentState.FetchingHashes or TorrentState.Starting)
+            if (t.State is TorrentDownloadState.Downloading or TorrentDownloadState.Metadata or TorrentDownloadState.Hashing)
                 tDownloading++;
-            else if (t.State == TorrentState.Seeding)
+            else if (t.State == TorrentDownloadState.Seeding)
                 tSeeding++;
             else
                 tPaused++;
@@ -638,9 +643,9 @@ public sealed class MainViewModel : ObservableObject
 
         bool matchesFilter = ActiveFilter switch
         {
-            SidebarFilter.TorrentsDownloading => t.State is TorrentState.Downloading or TorrentState.Metadata or TorrentState.Hashing or TorrentState.FetchingHashes or TorrentState.Starting,
-            SidebarFilter.TorrentsSeeding => t.State == TorrentState.Seeding,
-            SidebarFilter.TorrentsPaused => t.State is TorrentState.Paused or TorrentState.Stopped or TorrentState.Error,
+            SidebarFilter.TorrentsDownloading => t.State is TorrentDownloadState.Downloading or TorrentDownloadState.Metadata or TorrentDownloadState.Hashing,
+            SidebarFilter.TorrentsSeeding => t.State == TorrentDownloadState.Seeding,
+            SidebarFilter.TorrentsPaused => t.State is TorrentDownloadState.Paused or TorrentDownloadState.Stopped or TorrentDownloadState.Error,
             _ => true
         };
 

@@ -53,7 +53,7 @@ public sealed class AppSettings
 
     public long TorrentUploadSpeedLimitBytesPerSec { get; set; } = 0;
 
-    public int TorrentMaxConnections { get; set; } = 80;
+    public int TorrentMaxConnections { get; set; } = 300;
 
     public bool StopSeedingWhenComplete { get; set; } = false;
 
@@ -101,6 +101,6 @@ public sealed class AppSettings
         BrowserBridgePort = Math.Clamp(BrowserBridgePort, 1024, 65535);
         TorrentDownloadSpeedLimitBytesPerSec = Math.Max(0, TorrentDownloadSpeedLimitBytesPerSec);
         TorrentUploadSpeedLimitBytesPerSec = Math.Max(0, TorrentUploadSpeedLimitBytesPerSec);
-        TorrentMaxConnections = Math.Clamp(TorrentMaxConnections, 10, 500);
+        TorrentMaxConnections = Math.Clamp(TorrentMaxConnections, 10, 1000);
     }
 }

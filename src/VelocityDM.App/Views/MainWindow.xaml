@@ -505,6 +505,7 @@
                         <ContextMenu>
                             <MenuItem Header="Start / Resume Torrent" Click="ResumeSelected_Click" />
                             <MenuItem Header="Pause Torrent" Click="PauseSelected_Click" />
+                            <MenuItem Header="Force Recheck Files" Click="ForceRecheckTorrent_Click" />
                             <MenuItem Header="Toggle Sequential Order" Click="ToggleTorrentSequential_Click" />
                             <Separator />
                             <MenuItem Header="Open Save Folder" Click="OpenFolder_Click" />
@@ -618,7 +619,8 @@
                             <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,8,0,0">
                                 <Button Content="Open Folder" Style="{StaticResource ToolbarButtonStyle}" Padding="10,4" Margin="0,0,6,0" Click="OpenFolder_Click" />
                                 <Button Content="Copy Magnet" Style="{StaticResource ToolbarButtonStyle}" Padding="10,4" Margin="0,0,6,0" Click="CopyMagnet_Click" />
-                                <Button Content="Toggle Sequential" Style="{StaticResource ToolbarButtonStyle}" Padding="10,4" Click="ToggleTorrentSequential_Click" />
+                                <Button Content="Toggle Sequential" Style="{StaticResource ToolbarButtonStyle}" Padding="10,4" Margin="0,0,6,0" Click="ToggleTorrentSequential_Click" />
+                                <Button Content="Force Recheck" Style="{StaticResource ToolbarButtonStyle}" Padding="10,4" Click="ForceRecheckTorrent_Click" />
                             </StackPanel>
                         </Grid>
                     </Border>

@@ -1,14 +1,15 @@
-using System.Net;
-using MonoTorrent;
-using MonoTorrent.Client;
-using MonoTorrent.Connections;
-using MonoTorrent.PiecePicking;
+using System.Collections.Concurrent;
+using LibtorrentSharp;
+using LibtorrentSharp.Alerts;
+using LibtorrentSharp.Enums;
 using VelocityDM.Core.Models;
 
 namespace VelocityDM.Core.Services;
 
 /// <summary>
-/// Manages BitTorrent downloads (.torrent files and magnet links) via MonoTorrent ClientEngine.
+/// Manages BitTorrent downloads (.torrent files and magnet links) using libtorrent-rasterbar via LibtorrentSharp.
+/// Matches qBittorrent's protocol behavior: DHT, uTP, PeX, LSD, parallel multi-tracker announces,
+/// automatic piece-hash verification/resume on existing binary files, and fast-resume persistence.
 /// </summary>
 public sealed class TorrentManagerService : IAsyncDisposable
 {
@@ -18,19 +19,30 @@ public sealed class TorrentManagerService : IAsyncDisposable
         "udp://open.demonii.com:1337/announce",
         "udp://open.stealth.si:80/announce",
         "udp://tracker.torrent.eu.org:451/announce",
-        "udp://tracker.dler.org:6969/announce"
+        "udp://tracker.dler.org:6969/announce",
+        "udp://exodus.desync.com:6969/announce"
     ];
+
+    private sealed class Entry
+    {
+        public required TorrentRecord Record { get; init; }
+        public ManagedTorrent? Managed { get; set; }
+        public string? LoadError { get; set; }
+        public DateTimeOffset LastResumeSaveUtc { get; set; } = DateTimeOffset.MinValue;
+    }
 
     private readonly JsonStateStore _store;
     private readonly bool _useEphemeralPorts;
     private readonly object _sync = new();
-    private readonly List<(TorrentRecord Record, TorrentManager? Manager)> _entries = new();
-    private readonly string _torrentCacheDir;
+    private readonly List<Entry> _entries = new();
+    private readonly ConcurrentDictionary<string, TaskCompletionSource<bool>> _pendingResumeSaves = new(StringComparer.OrdinalIgnoreCase);
     private readonly string _torrentFilesDir;
+    private readonly string _resumeDir;
 
-    private ClientEngine? _engine;
+    private LibtorrentSession? _session;
     private AppSettings _settings = new();
-    private CancellationTokenSource? _monitorCts;
+    private CancellationTokenSource? _backgroundCts;
+    private Task? _alertTask;
     private Task? _monitorTask;
     private bool _disposed;
 
@@ -38,54 +50,60 @@ public sealed class TorrentManagerService : IAsyncDisposable
     {
         _store = store;
         _useEphemeralPorts = useEphemeralPorts;
-        _torrentCacheDir = Path.Combine(store.StorageDirectory, "torrent-cache");
         _torrentFilesDir = Path.Combine(store.StorageDirectory, "torrent-files");
-        Directory.CreateDirectory(_torrentCacheDir);
+        _resumeDir = Path.Combine(store.StorageDirectory, "torrent-resume");
         Directory.CreateDirectory(_torrentFilesDir);
+        Directory.CreateDirectory(_resumeDir);
     }
 
     public event Action<IReadOnlyList<TorrentStatusSnapshot>>? TorrentsUpdated;
 
-    public async Task InitializeAsync(AppSettings settings, CancellationToken cancellationToken = default)
+    public Task InitializeAsync(AppSettings settings, CancellationToken cancellationToken = default) =>
+        InitializeInternalAsync(settings, cancellationToken);
+
+    private async Task InitializeInternalAsync(AppSettings settings, CancellationToken cancellationToken)
     {
-        if (_engine != null)
+        if (_session != null)
             return;
 
         _settings = settings.Clone();
-        _engine = new ClientEngine(BuildEngineSettings(_settings));
+        _session = new LibtorrentSession(BuildSettingsPack(_settings));
+
+        _backgroundCts = new CancellationTokenSource();
+        _alertTask = Task.Run(() => AlertLoopAsync(_backgroundCts.Token));
 
         var saved = await _store.LoadTorrentsAsync(cancellationToken).ConfigureAwait(false);
         foreach (var record in saved)
         {
-            await AttachSavedRecordAsync(record).ConfigureAwait(false);
+            AttachSavedRecord(record);
         }
 
-        _monitorCts = new CancellationTokenSource();
-        _monitorTask = Task.Run(() => MonitorLoopAsync(_monitorCts.Token));
+        _monitorTask = Task.Run(() => MonitorLoopAsync(_backgroundCts.Token));
         PublishSnapshots();
     }
 
-    public async Task UpdateSettingsAsync(AppSettings settings)
+    public Task UpdateSettingsAsync(AppSettings settings)
     {
         _settings = settings.Clone();
-        if (_engine != null)
+        if (_session != null)
         {
-            await _engine.UpdateSettingsAsync(BuildEngineSettings(_settings)).ConfigureAwait(false);
+            _session.UpdateSettings(BuildSettingsPack(_settings));
         }
+        return Task.CompletedTask;
     }
 
     public IReadOnlyList<TorrentStatusSnapshot> GetSnapshots()
     {
         lock (_sync)
         {
-            return _entries.Select(e => CreateSnapshot(e.Record, e.Manager)).ToList();
+            return _entries.Select(CreateSnapshot).ToList();
         }
     }
 
     public int GetTrackerTierCount(Guid id)
     {
         var entry = FindEntry(id);
-        return entry.Manager?.TrackerManager.Tiers.Count ?? 0;
+        return entry?.Managed?.GetTrackerCount() ?? 0;
     }
 
     public async Task<TorrentStatusSnapshot> AddMagnetAsync(
@@ -95,53 +113,55 @@ public sealed class TorrentManagerService : IAsyncDisposable
         bool startImmediately = true)
     {
         EnsureInitialized();
-        if (!MagnetLink.TryParse(magnetUri.Trim(), out var magnet))
-        {
-            throw new ArgumentException("Invalid magnet URI.", nameof(magnetUri));
-        }
+        var (infoHashHex, displayName, cleanMagnet, trackers) = ManagedTorrent.ParseMagnetComponents(magnetUri);
 
-        if (_engine!.Contains(magnet.InfoHashes))
-        {
-            throw new InvalidOperationException("This torrent is already present in VelocityDM.");
-        }
+        EnsureNotDuplicate(infoHashHex, displayName ?? infoHashHex);
 
         string saveDir = ResolveSaveDir(customSaveDirectory);
         Directory.CreateDirectory(saveDir);
 
-        var torrentSettings = new TorrentSettingsBuilder
+        var addResult = _session!.Add(new AddTorrentParams
         {
-            MaximumConnections = _settings.TorrentMaxConnections,
-            CreateContainingDirectory = true
-        }.ToSettings();
+            MagnetUri = cleanMagnet,
+            SavePath = saveDir
+        });
 
-        TorrentManager manager = await AddMagnetWithParallelTrackersAsync(magnet, saveDir, torrentSettings, sequential)
-            .ConfigureAwait(false);
+        if (!addResult.IsValid || addResult.Magnet == null)
+            throw new InvalidOperationException("libtorrent failed to attach magnet URI.");
+
+        var managed = new ManagedTorrent(addResult.Magnet, saveDir);
+        AttachParallelTrackers(managed, trackers, isPrivate: false);
+
+        if (sequential)
+            managed.SetSequential(true);
+
+        if (startImmediately)
+            managed.Resume();
+        else
+            managed.Pause();
 
         var record = new TorrentRecord
         {
             Id = Guid.NewGuid(),
-            Name = string.IsNullOrWhiteSpace(magnet.Name) ? magnet.InfoHashes.V1OrV2.ToHex() : magnet.Name,
-            InfoHashHex = magnet.InfoHashes.V1OrV2.ToHex(),
-            MagnetUri = magnet.ToV1String(),
+            Name = displayName ?? infoHashHex,
+            InfoHashHex = infoHashHex,
+            MagnetUri = magnetUri.Trim(),
             SaveDirectory = saveDir,
             Sequential = sequential,
             IsPaused = !startImmediately,
             CreatedAt = DateTimeOffset.UtcNow
         };
 
+        var entry = new Entry { Record = record, Managed = managed };
         lock (_sync)
         {
-            _entries.Add((record, manager));
-        }
-
-        if (startImmediately)
-        {
-            await manager.StartAsync().ConfigureAwait(false);
+            _entries.Add(entry);
         }
 
         await PersistAsync().ConfigureAwait(false);
+        var snap = CreateSnapshot(entry);
         PublishSnapshots();
-        return CreateSnapshot(record, manager);
+        return snap;
     }
 
     public async Task<TorrentStatusSnapshot> AddTorrentFileAsync(
@@ -152,74 +172,80 @@ public sealed class TorrentManagerService : IAsyncDisposable
     {
         EnsureInitialized();
         if (!File.Exists(torrentFilePath))
-        {
             throw new FileNotFoundException("Torrent file was not found.", torrentFilePath);
-        }
 
-        Torrent torrent = await Torrent.LoadAsync(torrentFilePath).ConfigureAwait(false);
-        if (_engine!.Contains(torrent))
-        {
-            throw new InvalidOperationException($"'{torrent.Name}' is already present in VelocityDM.");
-        }
+        byte[] rawBytes = await File.ReadAllBytesAsync(torrentFilePath).ConfigureAwait(false);
+        var torrentInfo = new TorrentInfo(rawBytes);
+        string infoHashHex = ExtractInfoHashHex(torrentInfo);
+        string name = string.IsNullOrWhiteSpace(torrentInfo.Metadata.Name) ? infoHashHex : torrentInfo.Metadata.Name;
+
+        EnsureNotDuplicate(infoHashHex, name);
 
         string saveDir = ResolveSaveDir(customSaveDirectory);
         Directory.CreateDirectory(saveDir);
 
-        string infoHex = torrent.InfoHashes.V1OrV2.ToHex();
-        string cachedPath = Path.Combine(_torrentFilesDir, $"{infoHex}.torrent");
-        File.Copy(torrentFilePath, cachedPath, overwrite: true);
+        string cachedPath = Path.Combine(_torrentFilesDir, $"{infoHashHex}.torrent");
+        await File.WriteAllBytesAsync(cachedPath, rawBytes).ConfigureAwait(false);
 
-        var torrentSettings = new TorrentSettingsBuilder
+        var addResult = _session!.Add(new AddTorrentParams
         {
-            MaximumConnections = _settings.TorrentMaxConnections,
-            CreateContainingDirectory = true
-        }.ToSettings();
+            TorrentInfo = torrentInfo,
+            SavePath = saveDir
+        });
 
-        TorrentManager manager = sequential
-            ? await _engine.AddStreamingAsync(torrent, saveDir, torrentSettings).ConfigureAwait(false)
-            : await _engine.AddAsync(torrent, saveDir, torrentSettings).ConfigureAwait(false);
+        if (!addResult.IsValid || addResult.Torrent == null)
+            throw new InvalidOperationException($"libtorrent failed to load '{name}'.");
 
-        if (!torrent.IsPrivate)
+        var managed = new ManagedTorrent(addResult.Torrent, torrentInfo, saveDir);
+        bool isPrivate = ManagedTorrent.IsPrivateTorrentBytes(rawBytes);
+        if (!isPrivate && managed.GetTrackerCount() < 3)
         {
-            await SplitSingleTierTrackersAsync(manager).ConfigureAwait(false);
+            AttachParallelTrackers(managed, Array.Empty<string>(), isPrivate: false);
         }
+
+        if (sequential)
+            managed.SetSequential(true);
+
+        if (startImmediately)
+            managed.Resume();
+        else
+            managed.Pause();
 
         var record = new TorrentRecord
         {
             Id = Guid.NewGuid(),
-            Name = torrent.Name,
-            InfoHashHex = infoHex,
+            Name = name,
+            InfoHashHex = infoHashHex,
             CachedTorrentFilePath = cachedPath,
-            MagnetUri = new MagnetLink(torrent.InfoHashes, torrent.Name, torrent.AnnounceUrls.SelectMany(t => t).ToList(), null, torrent.Size).ToV1String(),
+            MagnetUri = $"magnet:?xt=urn:btih:{infoHashHex}&dn={Uri.EscapeDataString(name)}",
             SaveDirectory = saveDir,
             Sequential = sequential,
             IsPaused = !startImmediately,
             CreatedAt = DateTimeOffset.UtcNow
         };
 
+        var entry = new Entry { Record = record, Managed = managed };
         lock (_sync)
         {
-            _entries.Add((record, manager));
-        }
-
-        if (startImmediately)
-        {
-            await manager.StartAsync().ConfigureAwait(false);
+            _entries.Add(entry);
         }
 
         await PersistAsync().ConfigureAwait(false);
+        var snap = CreateSnapshot(entry);
         PublishSnapshots();
-        return CreateSnapshot(record, manager);
+        return snap;
     }
 
     public async Task StartOrResumeAsync(Guid id)
     {
         var entry = FindEntry(id);
-        if (entry.Manager == null)
+        if (entry?.Managed == null)
             return;
 
         entry.Record.IsPaused = false;
-        await entry.Manager.StartAsync().ConfigureAwait(false);
+        entry.LoadError = null;
+        entry.Managed.Resume();
+        entry.Managed.ReannounceAll();
         await PersistAsync().ConfigureAwait(false);
         PublishSnapshots();
     }
@@ -227,26 +253,27 @@ public sealed class TorrentManagerService : IAsyncDisposable
     public async Task PauseAsync(Guid id)
     {
         var entry = FindEntry(id);
-        if (entry.Manager == null)
+        if (entry?.Managed == null)
             return;
 
         entry.Record.IsPaused = true;
-        if (entry.Manager.State is TorrentState.Downloading or TorrentState.Seeding or TorrentState.Metadata or TorrentState.Hashing)
-        {
-            await entry.Manager.PauseAsync().ConfigureAwait(false);
-        }
+        entry.Managed.Pause();
+        TryRequestResumeSave(entry);
         await PersistAsync().ConfigureAwait(false);
         PublishSnapshots();
     }
 
-    public async Task StopAsync(Guid id)
+    public async Task StopAsync(Guid id) => await PauseAsync(id).ConfigureAwait(false);
+
+    public async Task ForceRecheckAsync(Guid id)
     {
         var entry = FindEntry(id);
-        if (entry.Manager == null)
+        if (entry?.Managed == null)
             return;
 
-        entry.Record.IsPaused = true;
-        await entry.Manager.StopAsync().ConfigureAwait(false);
+        entry.Managed.ForceRecheck();
+        if (!entry.Record.IsPaused)
+            entry.Managed.Resume();
         await PersistAsync().ConfigureAwait(false);
         PublishSnapshots();
     }
@@ -254,39 +281,30 @@ public sealed class TorrentManagerService : IAsyncDisposable
     public async Task SetSequentialAsync(Guid id, bool sequential)
     {
         var entry = FindEntry(id);
-        if (entry.Manager == null)
+        if (entry?.Managed == null)
             return;
 
         entry.Record.Sequential = sequential;
-        IPieceRequester requester = sequential
-            ? new StreamingPieceRequester()
-            : new StandardPieceRequester(new PieceRequesterSettings(
-                allowPrioritisation: true,
-                allowRandomised: true,
-                allowRarestFirst: true,
-                maximumDuplicateRequests: 2));
-        await entry.Manager.ChangePickerAsync(requester).ConfigureAwait(false);
+        entry.Managed.SetSequential(sequential);
         await PersistAsync().ConfigureAwait(false);
         PublishSnapshots();
     }
 
-    public async Task SetFilePriorityAsync(Guid id, string filePath, Priority priority)
+    public Task SetFilePriorityAsync(Guid id, string filePath, TorrentPriority priority)
     {
         var entry = FindEntry(id);
-        if (entry.Manager == null)
-            return;
+        if (entry?.Managed == null)
+            return Task.CompletedTask;
 
-        var file = entry.Manager.Files.FirstOrDefault(f => string.Equals(f.Path, filePath, StringComparison.OrdinalIgnoreCase));
-        if (file != null)
-        {
-            await entry.Manager.SetFilePriorityAsync(file, priority).ConfigureAwait(false);
+        if (entry.Managed.SetFilePriority(filePath, priority))
             PublishSnapshots();
-        }
+
+        return Task.CompletedTask;
     }
 
     public async Task RemoveAsync(Guid id, bool deleteDownloadedData)
     {
-        (TorrentRecord Record, TorrentManager? Manager) entry;
+        Entry? entry;
         lock (_sync)
         {
             int idx = _entries.FindIndex(e => e.Record.Id == id);
@@ -296,84 +314,200 @@ public sealed class TorrentManagerService : IAsyncDisposable
             _entries.RemoveAt(idx);
         }
 
-        if (entry.Manager != null && _engine != null)
+        if (entry.Managed != null && _session != null)
         {
             try
             {
-                await entry.Manager.StopAsync(TimeSpan.FromSeconds(3)).ConfigureAwait(false);
+                entry.Managed.Pause();
+                entry.Managed.Detach(_session, deleteDownloadedData);
             }
             catch
             {
-                // Continue removal even if stop times out
+                // Continue cleanup on detach error
             }
-
-            var mode = deleteDownloadedData ? RemoveMode.CacheDataAndDownloadedData : RemoveMode.CacheDataOnly;
-            await _engine.RemoveAsync(entry.Manager, mode).ConfigureAwait(false);
         }
 
-        if (!string.IsNullOrWhiteSpace(entry.Record.CachedTorrentFilePath) && File.Exists(entry.Record.CachedTorrentFilePath))
-        {
-            try { File.Delete(entry.Record.CachedTorrentFilePath); } catch { }
-        }
+        DeleteFileQuietly(entry.Record.CachedTorrentFilePath);
+        DeleteFileQuietly(entry.Record.ResumeDataFilePath);
 
         await PersistAsync().ConfigureAwait(false);
         PublishSnapshots();
     }
 
-    private async Task AttachSavedRecordAsync(TorrentRecord record)
+    private void AttachSavedRecord(TorrentRecord record)
     {
-        if (_engine == null)
+        if (_session == null)
             return;
 
         try
         {
             Directory.CreateDirectory(record.SaveDirectory);
-            TorrentManager? manager = null;
 
-            var settings = new TorrentSettingsBuilder
-            {
-                MaximumConnections = _settings.TorrentMaxConnections,
-                CreateContainingDirectory = true
-            }.ToSettings();
+            ManagedTorrent? managed = null;
+            byte[]? resumeBytes = !string.IsNullOrWhiteSpace(record.ResumeDataFilePath) && File.Exists(record.ResumeDataFilePath)
+                ? File.ReadAllBytes(record.ResumeDataFilePath)
+                : null;
 
-            if (!string.IsNullOrWhiteSpace(record.CachedTorrentFilePath) && File.Exists(record.CachedTorrentFilePath))
+            if (resumeBytes is { Length: > 0 })
             {
-                var torrent = await Torrent.LoadAsync(record.CachedTorrentFilePath).ConfigureAwait(false);
-                if (!_engine.Contains(torrent))
+                var res = _session.Add(new AddTorrentParams { ResumeData = resumeBytes, SavePath = record.SaveDirectory });
+                if (res.IsValid)
                 {
-                    manager = record.Sequential
-                        ? await _engine.AddStreamingAsync(torrent, record.SaveDirectory, settings).ConfigureAwait(false)
-                        : await _engine.AddAsync(torrent, record.SaveDirectory, settings).ConfigureAwait(false);
-                    if (!torrent.IsPrivate)
-                    {
-                        await SplitSingleTierTrackersAsync(manager).ConfigureAwait(false);
-                    }
+                    if (res.Torrent != null)
+                        managed = new ManagedTorrent(res.Torrent, null, record.SaveDirectory);
+                    else if (res.Magnet != null)
+                        managed = new ManagedTorrent(res.Magnet, record.SaveDirectory);
                 }
             }
-            else if (!string.IsNullOrWhiteSpace(record.MagnetUri) && MagnetLink.TryParse(record.MagnetUri, out var magnet))
+
+            if (managed == null && !string.IsNullOrWhiteSpace(record.CachedTorrentFilePath) && File.Exists(record.CachedTorrentFilePath))
             {
-                if (!_engine.Contains(magnet.InfoHashes))
+                byte[] torrentBytes = File.ReadAllBytes(record.CachedTorrentFilePath);
+                var torrentInfo = new TorrentInfo(torrentBytes);
+                var res = _session.Add(new AddTorrentParams { TorrentInfo = torrentInfo, SavePath = record.SaveDirectory });
+                if (res.IsValid && res.Torrent != null)
                 {
-                    manager = await AddMagnetWithParallelTrackersAsync(magnet, record.SaveDirectory, settings, record.Sequential)
-                        .ConfigureAwait(false);
+                    managed = new ManagedTorrent(res.Torrent, torrentInfo, record.SaveDirectory);
+                    if (!ManagedTorrent.IsPrivateTorrentBytes(torrentBytes) && managed.GetTrackerCount() < 3)
+                        AttachParallelTrackers(managed, Array.Empty<string>(), isPrivate: false);
                 }
+            }
+
+            if (managed == null && !string.IsNullOrWhiteSpace(record.MagnetUri))
+            {
+                var (_, _, cleanMagnet, trackers) = ManagedTorrent.ParseMagnetComponents(record.MagnetUri);
+                var res = _session.Add(new AddTorrentParams { MagnetUri = cleanMagnet, SavePath = record.SaveDirectory });
+                if (res.IsValid && res.Magnet != null)
+                {
+                    managed = new ManagedTorrent(res.Magnet, record.SaveDirectory);
+                    AttachParallelTrackers(managed, trackers, isPrivate: false);
+                }
+            }
+
+            if (managed != null)
+            {
+                managed.SetSequential(record.Sequential);
+                if (!record.IsPaused && _settings.AutoStartQueuedDownloads)
+                    managed.Resume();
+                else
+                    managed.Pause();
             }
 
             lock (_sync)
             {
-                _entries.Add((record, manager));
-            }
-
-            if (manager != null && !record.IsPaused && _settings.AutoStartQueuedDownloads)
-            {
-                await manager.StartAsync().ConfigureAwait(false);
+                _entries.Add(new Entry
+                {
+                    Record = record,
+                    Managed = managed,
+                    LoadError = managed == null ? "Failed to restore torrent session handle." : null
+                });
             }
         }
-        catch
+        catch (Exception ex)
         {
             lock (_sync)
             {
-                _entries.Add((record, null));
+                _entries.Add(new Entry
+                {
+                    Record = record,
+                    Managed = null,
+                    LoadError = $"Failed to restore torrent: {ex.Message}"
+                });
+            }
+        }
+    }
+
+    private async Task AlertLoopAsync(CancellationToken ct)
+    {
+        if (_session == null)
+            return;
+
+        try
+        {
+            await foreach (var alert in _session.Alerts.WithCancellation(ct).ConfigureAwait(false))
+            {
+                try
+                {
+                    await HandleAlertAsync(alert).ConfigureAwait(false);
+                }
+                catch
+                {
+                    // Isolate individual alert exceptions so pump stays alive
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Normal shutdown
+        }
+        catch
+        {
+            // Session disposed
+        }
+    }
+
+    private async Task HandleAlertAsync(Alert alert)
+    {
+        switch (alert)
+        {
+            case MetadataReceivedAlert metaAlert:
+            {
+                string hash = metaAlert.InfoHash.ToString().ToUpperInvariant();
+                Entry? entry = FindEntryByInfoHash(hash);
+                if (entry?.Managed != null)
+                {
+                    TryUpdateRecordNameFromHandle(entry);
+                    TryRequestResumeSave(entry);
+                }
+                break;
+            }
+
+            case ResumeDataReadyAlert resumeAlert:
+            {
+                string hash = resumeAlert.InfoHash.ToString().ToUpperInvariant();
+                Entry? entry = FindEntryByInfoHash(hash);
+                if (entry != null && resumeAlert.ResumeData is { Length: > 0 } data)
+                {
+                    string path = Path.Combine(_resumeDir, $"{entry.Record.Id}.resume");
+                    await File.WriteAllBytesAsync(path, data).ConfigureAwait(false);
+                    entry.Record.ResumeDataFilePath = path;
+                    entry.LastResumeSaveUtc = DateTimeOffset.UtcNow;
+
+                    string? bencodedName = ManagedTorrent.ExtractBencodedName(data);
+                    if (!string.IsNullOrWhiteSpace(bencodedName) && LooksLikeRawHash(entry.Record.Name, entry.Record.InfoHashHex))
+                        entry.Record.Name = bencodedName;
+
+                    await PersistAsync().ConfigureAwait(false);
+                }
+
+                if (_pendingResumeSaves.TryRemove(hash, out var tcs))
+                    tcs.TrySetResult(true);
+                break;
+            }
+
+            case TorrentFinishedAlert finishedAlert:
+            {
+                string hash = finishedAlert.InfoHash.ToString().ToUpperInvariant();
+                Entry? entry = FindEntryByInfoHash(hash);
+                if (entry?.Managed != null)
+                {
+                    TryRequestResumeSave(entry);
+                    if (_settings.StopSeedingWhenComplete && !entry.Record.IsPaused)
+                    {
+                        entry.Record.IsPaused = true;
+                        entry.Managed.Pause();
+                        await PersistAsync().ConfigureAwait(false);
+                    }
+                }
+                break;
+            }
+
+            case SaveResumeDataFailedAlert failedAlert:
+            {
+                string hash = failedAlert.InfoHash.ToString().ToUpperInvariant();
+                if (_pendingResumeSaves.TryRemove(hash, out var tcs))
+                    tcs.TrySetResult(false);
+                break;
             }
         }
     }
@@ -383,32 +517,48 @@ public sealed class TorrentManagerService : IAsyncDisposable
         using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(500));
         while (await timer.WaitForNextTickAsync(ct).ConfigureAwait(false))
         {
-            List<(TorrentRecord Record, TorrentManager? Manager)> copy;
+            List<Entry> copy;
             lock (_sync)
             {
                 copy = _entries.ToList();
             }
 
             bool dirty = false;
-            foreach (var item in copy)
-            {
-                if (item.Manager == null) continue;
+            var now = DateTimeOffset.UtcNow;
 
-                if (item.Manager.HasMetadata && !string.IsNullOrWhiteSpace(item.Manager.Name) &&
-                    !string.Equals(item.Record.Name, item.Manager.Name, StringComparison.Ordinal))
-                {
-                    item.Record.Name = item.Manager.Name;
+            foreach (var entry in copy)
+            {
+                if (entry.Managed == null || !entry.Managed.IsValid)
+                    continue;
+
+                if (TryUpdateRecordNameFromHandle(entry))
                     dirty = true;
+
+                TorrentStatus status;
+                try
+                {
+                    status = entry.Managed.GetStatus();
+                }
+                catch
+                {
+                    continue;
                 }
 
-                if (_settings.StopSeedingWhenComplete && item.Manager.State == TorrentState.Seeding && !item.Record.IsPaused)
+                if (_settings.StopSeedingWhenComplete &&
+                    !entry.Record.IsPaused &&
+                    status.State is LibtorrentSharp.Enums.TorrentState.Seeding or LibtorrentSharp.Enums.TorrentState.Finished)
                 {
-                    item.Record.IsPaused = true;
+                    entry.Record.IsPaused = true;
+                    entry.Managed.Pause();
+                    TryRequestResumeSave(entry);
                     dirty = true;
-                    _ = Task.Run(async () =>
-                    {
-                        try { await item.Manager.StopAsync().ConfigureAwait(false); } catch { }
-                    }, CancellationToken.None);
+                }
+                else if (entry.Managed.HasMetadata &&
+                         !entry.Record.IsPaused &&
+                         (now - entry.LastResumeSaveUtc).TotalSeconds >= 30)
+                {
+                    entry.LastResumeSaveUtc = now;
+                    TryRequestResumeSave(entry);
                 }
             }
 
@@ -421,11 +571,47 @@ public sealed class TorrentManagerService : IAsyncDisposable
         }
     }
 
+    private void TryRequestResumeSave(Entry entry)
+    {
+        if (_session == null || entry.Managed == null || !entry.Managed.IsValid || !entry.Managed.HasMetadata)
+            return;
+
+        try
+        {
+            entry.Managed.RequestResumeData(_session);
+        }
+        catch
+        {
+            // Ignore transient request failures
+        }
+    }
+
+    private bool TryUpdateRecordNameFromHandle(Entry entry)
+    {
+        if (entry.Managed == null || !entry.Managed.HasMetadata)
+            return false;
+
+        string? resolved = entry.Managed.TryResolveDisplayName();
+        if (string.IsNullOrWhiteSpace(resolved) || string.Equals(entry.Record.Name, resolved, StringComparison.Ordinal))
+            return false;
+
+        if (LooksLikeRawHash(entry.Record.Name, entry.Record.InfoHashHex) || string.IsNullOrWhiteSpace(entry.Record.Name))
+        {
+            entry.Record.Name = resolved;
+            return true;
+        }
+
+        return false;
+    }
+
     private void PublishSnapshots() => TorrentsUpdated?.Invoke(GetSnapshots());
 
-    private static TorrentStatusSnapshot CreateSnapshot(TorrentRecord record, TorrentManager? manager)
+    private static TorrentStatusSnapshot CreateSnapshot(Entry entry)
     {
-        if (manager == null)
+        var record = entry.Record;
+        var managed = entry.Managed;
+
+        if (managed == null || !managed.IsValid)
         {
             return new TorrentStatusSnapshot
             {
@@ -434,57 +620,79 @@ public sealed class TorrentManagerService : IAsyncDisposable
                 InfoHashHex = record.InfoHashHex,
                 MagnetUri = record.MagnetUri,
                 SaveDirectory = record.SaveDirectory,
-                State = TorrentState.Error,
+                State = TorrentDownloadState.Error,
                 IsPaused = record.IsPaused,
                 Sequential = record.Sequential,
                 CreatedAt = record.CreatedAt,
-                ErrorMessage = "Failed to load torrent metadata on startup."
+                ErrorMessage = entry.LoadError ?? "Failed to initialize torrent handle."
             };
         }
 
-        long totalBytes = manager.Torrent?.Size ?? manager.MagnetLink?.Size ?? 0;
-        long downloadedBytes = totalBytes > 0
-            ? (long)Math.Clamp(totalBytes * (manager.Progress / 100.0), 0, totalBytes)
-            : manager.Monitor.DataBytesReceived;
-
-        var files = manager.Files
-            .Select(f => new TorrentFileSnapshot
+        TorrentStatus status;
+        try
+        {
+            status = managed.GetStatus();
+        }
+        catch (Exception ex)
+        {
+            return new TorrentStatusSnapshot
             {
-                Path = f.Path,
-                FullPath = f.FullPath,
-                Length = f.Length,
-                ProgressPercent = f.BitField.PercentComplete,
-                Priority = f.Priority
-            })
-            .ToList();
+                Id = record.Id,
+                Name = record.Name,
+                InfoHashHex = record.InfoHashHex,
+                MagnetUri = record.MagnetUri,
+                SaveDirectory = record.SaveDirectory,
+                State = TorrentDownloadState.Error,
+                IsPaused = record.IsPaused,
+                Sequential = record.Sequential,
+                CreatedAt = record.CreatedAt,
+                ErrorMessage = ex.Message
+            };
+        }
+
+        var state = ManagedTorrent.MapState(status, record.IsPaused);
+        long totalBytes = managed.TotalSize;
+        double progressPct = Math.Clamp(status.Progress * 100.0, 0.0, 100.0);
+
+        long downloadedBytes = state == TorrentDownloadState.Hashing
+            ? 0
+            : (totalBytes > 0
+                ? (long)Math.Clamp(Math.Round(status.Progress * totalBytes), 0, totalBytes)
+                : Math.Max(status.AllTimeDownloaded, status.BytesDownloaded));
+
+        long uploadedBytes = Math.Max(status.AllTimeUploaded, status.BytesUploaded);
+
+        string displayName = !string.IsNullOrWhiteSpace(record.Name)
+            ? record.Name
+            : (managed.TryResolveDisplayName() ?? record.InfoHashHex);
 
         return new TorrentStatusSnapshot
         {
             Id = record.Id,
-            Name = string.IsNullOrWhiteSpace(manager.Name) ? record.Name : manager.Name,
+            Name = displayName,
             InfoHashHex = record.InfoHashHex,
             MagnetUri = record.MagnetUri,
-            SaveDirectory = string.IsNullOrWhiteSpace(manager.ContainingDirectory) ? record.SaveDirectory : manager.ContainingDirectory,
-            State = manager.State,
-            IsPaused = record.IsPaused || manager.State is TorrentState.Paused or TorrentState.Stopped,
+            SaveDirectory = string.IsNullOrWhiteSpace(status.SavePath) ? record.SaveDirectory : status.SavePath,
+            State = state,
+            IsPaused = record.IsPaused || state == TorrentDownloadState.Paused,
             Sequential = record.Sequential,
-            ProgressPercent = Math.Clamp(manager.Progress, 0, 100),
+            ProgressPercent = progressPct,
             TotalBytes = totalBytes,
             DownloadedBytes = downloadedBytes,
-            TotalUploadedBytes = manager.Monitor.DataBytesSent,
-            DownloadSpeedBytesPerSec = manager.Monitor.DownloadRate,
-            UploadSpeedBytesPerSec = manager.Monitor.UploadRate,
-            ConnectedPeers = manager.OpenConnections,
-            Seeds = manager.Peers.Seeds,
-            Leechers = manager.Peers.Leechs,
-            HasMetadata = manager.HasMetadata,
-            ErrorMessage = manager.Error?.Exception?.Message ?? manager.Error?.Reason.ToString(),
+            TotalUploadedBytes = uploadedBytes,
+            DownloadSpeedBytesPerSec = Math.Max(0, status.DownloadRate),
+            UploadSpeedBytesPerSec = Math.Max(0, status.UploadRate),
+            ConnectedPeers = status.PeerCount,
+            Seeds = status.SeedCount,
+            Leechers = Math.Max(0, status.PeerCount - status.SeedCount),
+            HasMetadata = managed.HasMetadata,
+            ErrorMessage = string.IsNullOrWhiteSpace(status.ErrorMessage) ? null : status.ErrorMessage,
             CreatedAt = record.CreatedAt,
-            Files = files
+            Files = managed.GetFileSnapshots(status.Progress)
         };
     }
 
-    private (TorrentRecord Record, TorrentManager? Manager) FindEntry(Guid id)
+    private Entry? FindEntry(Guid id)
     {
         lock (_sync)
         {
@@ -492,133 +700,104 @@ public sealed class TorrentManagerService : IAsyncDisposable
         }
     }
 
-    private EngineSettings BuildEngineSettings(AppSettings settings)
+    private Entry? FindEntryByInfoHash(string infoHashHex)
     {
-        var builder = new EngineSettingsBuilder
+        lock (_sync)
         {
-            CacheDirectory = _torrentCacheDir,
-            AutoSaveLoadDhtCache = true,
-            AutoSaveLoadFastResume = true,
-            AutoSaveLoadMagnetLinkMetadata = true,
-            AllowLocalPeerDiscovery = !_useEphemeralPorts,
-            AllowPortForwarding = !_useEphemeralPorts,
-            MaximumConnections = settings.TorrentMaxConnections,
-            MaximumHalfOpenConnections = 32,
-            ConnectionTimeout = TimeSpan.FromSeconds(5),
-            StaleRequestTimeout = TimeSpan.FromSeconds(15),
-            MaximumDownloadRate = (int)Math.Clamp(settings.TorrentDownloadSpeedLimitBytesPerSec, 0, int.MaxValue),
-            MaximumUploadRate = (int)Math.Clamp(settings.TorrentUploadSpeedLimitBytesPerSec, 0, int.MaxValue)
-        };
-
-        // Prefer PlainText first so peers (e.g. qBittorrent/Transmission) that reject RC4Header connect immediately.
-        builder.AllowedEncryption.Clear();
-        builder.AllowedEncryption.Add(EncryptionType.PlainText);
-        builder.AllowedEncryption.Add(EncryptionType.RC4Header);
-        builder.AllowedEncryption.Add(EncryptionType.RC4Full);
-
-        if (_useEphemeralPorts)
-        {
-            builder.ListenEndPoints["ipv4"] = new IPEndPoint(IPAddress.Loopback, 0);
-            builder.DhtEndPoint = null;
+            return _entries.FirstOrDefault(e => string.Equals(e.Record.InfoHashHex, infoHashHex, StringComparison.OrdinalIgnoreCase));
         }
-
-        return builder.ToSettings();
     }
 
-    private async Task<TorrentManager> AddMagnetWithParallelTrackersAsync(
-        MagnetLink magnet,
-        string saveDirectory,
-        TorrentSettings torrentSettings,
-        bool sequential)
+    private void EnsureNotDuplicate(string infoHashHex, string label)
     {
-        var trackerUrls = CollectUniqueTrackerUrls(magnet.AnnounceUrls);
-        if (trackerUrls.Count < 3)
+        lock (_sync)
+        {
+            if (_entries.Any(e => string.Equals(e.Record.InfoHashHex, infoHashHex, StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidOperationException($"'{label}' is already present in VelocityDM.");
+        }
+    }
+
+    private SettingsPack BuildSettingsPack(AppSettings settings)
+    {
+        var pack = new SettingsPack();
+        pack.Set("user_agent", "qBittorrent/5.0.0");
+        pack.Set("peer_fingerprint", "-qB5000-");
+        pack.Set("listen_interfaces", _useEphemeralPorts ? "127.0.0.1:0" : "0.0.0.0:0");
+
+        bool networkingEnabled = !_useEphemeralPorts;
+        pack.Set("enable_dht", networkingEnabled);
+        pack.Set("enable_lsd", networkingEnabled);
+        pack.Set("enable_upnp", networkingEnabled);
+        pack.Set("enable_natpmp", networkingEnabled);
+        pack.Set("dht_bootstrap_nodes", "dht.libtorrent.org:25401,dht.transmissionbt.com:6881,router.bittorrent.com:6881,router.utorrent.com:6881");
+
+        // qBittorrent / high-throughput tuning: parallel multi-tracker announces, fast peering, prefer TCP with uTP enabled
+        pack.Set("announce_to_all_trackers", true);
+        pack.Set("announce_to_all_tiers", true);
+        pack.Set("connections_limit", Math.Clamp(settings.TorrentMaxConnections, 10, 1000));
+        pack.Set("connection_speed", 50);
+        pack.Set("mixed_mode_algorithm", 0); // prefer_tcp
+        pack.Set("enable_outgoing_tcp", true);
+        pack.Set("enable_incoming_tcp", true);
+        pack.Set("enable_outgoing_utp", true);
+        pack.Set("enable_incoming_utp", true);
+        pack.Set("out_enc_policy", 1); // pe_enabled
+        pack.Set("in_enc_policy", 1);
+        pack.Set("allowed_enc_level", 3);
+        pack.Set("max_out_request_queue", 1500);
+        pack.Set("max_allowed_in_request_queue", 2000);
+        pack.Set("request_queue_time", 3);
+        pack.Set("aio_threads", 8);
+        pack.Set("checking_mem_usage", 512);
+        pack.Set("active_downloads", -1);
+        pack.Set("active_seeds", -1);
+        pack.Set("active_limit", -1);
+
+        pack.Set("download_rate_limit", (int)Math.Clamp(settings.TorrentDownloadSpeedLimitBytesPerSec, 0, int.MaxValue));
+        pack.Set("upload_rate_limit", (int)Math.Clamp(settings.TorrentUploadSpeedLimitBytesPerSec, 0, int.MaxValue));
+        pack.Set("alert_mask", (int)(AlertCategories.Error | AlertCategories.Status | AlertCategories.Tracker | AlertCategories.Storage));
+
+        return pack;
+    }
+
+    private static void AttachParallelTrackers(ManagedTorrent managed, IReadOnlyList<string> explicitTrackers, bool isPrivate)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        int tier = 0;
+
+        foreach (var raw in explicitTrackers)
+        {
+            string url = raw.Trim();
+            if (!string.IsNullOrEmpty(url) && seen.Add(url))
+                managed.AddTracker(url, tier++);
+        }
+
+        if (!isPrivate && seen.Count + managed.GetTrackerCount() < 3)
         {
             foreach (var fallback in FallbackPublicTrackers)
             {
-                if (!trackerUrls.Contains(fallback, StringComparer.OrdinalIgnoreCase))
-                {
-                    trackerUrls.Add(fallback);
-                }
+                if (seen.Add(fallback))
+                    managed.AddTracker(fallback, tier++);
             }
         }
-
-        // Add magnet without single-tier trackers, then attach each tracker individually so MonoTorrent announces them in parallel.
-        var cleanMagnet = new MagnetLink(
-            magnet.InfoHashes,
-            magnet.Name,
-            Array.Empty<string>(),
-            magnet.Webseeds,
-            magnet.Size);
-
-        TorrentManager manager = sequential
-            ? await _engine!.AddStreamingAsync(cleanMagnet, saveDirectory, torrentSettings).ConfigureAwait(false)
-            : await _engine!.AddAsync(cleanMagnet, saveDirectory, torrentSettings).ConfigureAwait(false);
-
-        foreach (var trackerUrl in trackerUrls)
-        {
-            if (Uri.TryCreate(trackerUrl, UriKind.Absolute, out var uri))
-            {
-                try
-                {
-                    await manager.TrackerManager.AddTrackerAsync(uri).ConfigureAwait(false);
-                }
-                catch
-                {
-                    // Skip unsupported/malformed tracker scheme safely
-                }
-            }
-        }
-
-        return manager;
     }
 
-    private static async Task SplitSingleTierTrackersAsync(TorrentManager manager)
+    private static string ExtractInfoHashHex(TorrentInfo info)
     {
-        if (manager.TrackerManager.Tiers.Count != 1 || manager.TrackerManager.Tiers[0].Trackers.Count <= 1)
-            return;
-
-        var existing = manager.TrackerManager.Tiers[0].Trackers.ToList();
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        // Keep the first tracker in Tier 0 and move remaining trackers into their own tiers for parallel announces.
-        if (existing[0].Uri != null)
+        if (info.Metadata.Hashes is { } h)
         {
-            seen.Add(existing[0].Uri.AbsoluteUri);
+            if (!string.IsNullOrWhiteSpace(h.PreferredHex))
+                return h.PreferredHex.ToUpperInvariant();
+            if (h.V1 is { } v1)
+                return v1.ToString().ToUpperInvariant();
         }
-
-        for (int i = 1; i < existing.Count; i++)
-        {
-            var tracker = existing[i];
-            try
-            {
-                await manager.TrackerManager.RemoveTrackerAsync(tracker).ConfigureAwait(false);
-                if (tracker.Uri != null && seen.Add(tracker.Uri.AbsoluteUri))
-                {
-                    await manager.TrackerManager.AddTrackerAsync(tracker.Uri).ConfigureAwait(false);
-                }
-            }
-            catch
-            {
-                // Ignore individual tracker move failures
-            }
-        }
+        return Guid.NewGuid().ToString("N").ToUpperInvariant();
     }
 
-    private static List<string> CollectUniqueTrackerUrls(IEnumerable<string> urls)
-    {
-        var list = new List<string>();
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var raw in urls)
-        {
-            var trimmed = raw?.Trim();
-            if (!string.IsNullOrEmpty(trimmed) && seen.Add(trimmed))
-            {
-                list.Add(trimmed);
-            }
-        }
-        return list;
-    }
+    private static bool LooksLikeRawHash(string? value, string infoHashHex) =>
+        string.IsNullOrWhiteSpace(value) ||
+        string.Equals(value.Trim(), infoHashHex, StringComparison.OrdinalIgnoreCase) ||
+        (value.Length == 40 && value.All(Uri.IsHexDigit));
 
     private string ResolveSaveDir(string? customDir)
     {
@@ -626,6 +805,14 @@ public sealed class TorrentManagerService : IAsyncDisposable
             return customDir.Trim();
 
         return Path.Combine(_settings.DefaultDownloadDirectory, "Torrents");
+    }
+
+    private static void DeleteFileQuietly(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+            return;
+
+        try { File.Delete(path); } catch { }
     }
 
     private Task PersistAsync()
@@ -640,7 +827,7 @@ public sealed class TorrentManagerService : IAsyncDisposable
 
     private void EnsureInitialized()
     {
-        if (_engine == null)
+        if (_session == null)
             throw new InvalidOperationException("TorrentManagerService has not been initialized.");
     }
 
@@ -650,25 +837,51 @@ public sealed class TorrentManagerService : IAsyncDisposable
             return;
         _disposed = true;
 
-        _monitorCts?.Cancel();
+        if (_session != null)
+        {
+            var waitTasks = new List<Task>();
+            List<Entry> snapshot;
+            lock (_sync)
+            {
+                snapshot = _entries.ToList();
+            }
+
+            foreach (var entry in snapshot)
+            {
+                if (entry.Managed != null && entry.Managed.IsValid && entry.Managed.HasMetadata)
+                {
+                    var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                    _pendingResumeSaves[entry.Record.InfoHashHex] = tcs;
+                    waitTasks.Add(tcs.Task);
+                    TryRequestResumeSave(entry);
+                }
+            }
+
+            if (waitTasks.Count > 0)
+            {
+                try
+                {
+                    await Task.WhenAny(Task.WhenAll(waitTasks), Task.Delay(1500)).ConfigureAwait(false);
+                }
+                catch
+                {
+                    // Proceed with teardown on timeout
+                }
+            }
+        }
+
+        _backgroundCts?.Cancel();
         if (_monitorTask != null)
         {
             try { await _monitorTask.ConfigureAwait(false); } catch { }
         }
-        _monitorCts?.Dispose();
-
-        if (_engine != null)
+        if (_alertTask != null)
         {
-            try
-            {
-                await _engine.StopAllAsync(TimeSpan.FromSeconds(3)).ConfigureAwait(false);
-            }
-            catch
-            {
-                // Best-effort engine stop
-            }
-            _engine.Dispose();
-            _engine = null;
+            try { await _alertTask.ConfigureAwait(false); } catch { }
         }
+        _backgroundCts?.Dispose();
+
+        _session?.Dispose();
+        _session = null;
     }
 }

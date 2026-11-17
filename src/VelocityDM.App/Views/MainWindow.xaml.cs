@@ -2,7 +2,6 @@ using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
-using MonoTorrent;
 using VelocityDM.App.Helpers;
 using VelocityDM.App.ViewModels;
 using VelocityDM.Core.Models;
@@ -248,13 +247,18 @@ public partial class MainWindow : Window
             !_viewModel.SelectedTorrent.Sequential);
     }
 
+    private async void ForceRecheckTorrent_Click(object sender, RoutedEventArgs e)
+    {
+        await _viewModel.ForceRecheckSelectedTorrentAsync();
+    }
+
     private async void SetTorrentFilePriority_Click(object sender, RoutedEventArgs e)
     {
         if (_viewModel.SelectedTorrent == null ||
             TorrentFilesGrid.SelectedItem is not TorrentFileViewModel fileVm ||
             sender is not MenuItem mi ||
             mi.Tag is not string tag ||
-            !Enum.TryParse<Priority>(tag, out var priority))
+            !Enum.TryParse<TorrentPriority>(tag, out var priority))
         {
             return;
         }
