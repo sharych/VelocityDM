@@ -1,12 +1,12 @@
 <Window x:Class="VelocityDM.App.Views.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="VelocityDM — Parallel Download Manager"
+        Title="VelocityDM — Parallel Download &amp; Torrent Manager"
         Icon="pack://application:,,,/Assets/VelocityDM.ico"
-        Width="1220"
-        Height="780"
-        MinWidth="960"
-        MinHeight="620"
+        Width="1260"
+        Height="800"
+        MinWidth="980"
+        MinHeight="640"
         WindowStartupLocation="CenterScreen"
         Background="{StaticResource BgWindowBrush}">
     <Window.Resources>
@@ -31,11 +31,15 @@
                 <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
                     <Button Content="+ Add URL"
                             Style="{StaticResource PrimaryButtonStyle}"
-                            Margin="0,0,8,0"
+                            Margin="0,0,6,0"
                             Click="AddUrl_Click" />
+                    <Button Content="+ Torrent"
+                            Style="{StaticResource ToolbarButtonStyle}"
+                            Margin="0,0,6,0"
+                            Click="AddTorrent_Click" />
                     <Button Content="Batch Import"
                             Style="{StaticResource ToolbarButtonStyle}"
-                            Margin="0,0,14,0"
+                            Margin="0,0,12,0"
                             Click="BatchImport_Click" />
                     <Button Content="▶ Resume"
                             Style="{StaticResource ToolbarButtonStyle}"
@@ -43,7 +47,7 @@
                             Click="ResumeSelected_Click" />
                     <Button Content="⏸ Pause"
                             Style="{StaticResource ToolbarButtonStyle}"
-                            Margin="0,0,14,0"
+                            Margin="0,0,12,0"
                             Click="PauseSelected_Click" />
                     <Button Content="Resume All"
                             Style="{StaticResource ToolbarButtonStyle}"
@@ -51,12 +55,16 @@
                             Click="ResumeAll_Click" />
                     <Button Content="Pause All"
                             Style="{StaticResource ToolbarButtonStyle}"
-                            Margin="0,0,14,0"
+                            Margin="0,0,12,0"
                             Click="PauseAll_Click" />
                     <Button Content="Remove"
                             Style="{StaticResource DangerButtonStyle}"
-                            Margin="0,0,14,0"
+                            Margin="0,0,12,0"
                             Click="RemoveSelected_Click" />
+                    <Button Content="Chrome Ext"
+                            Style="{StaticResource ToolbarButtonStyle}"
+                            Margin="0,0,6,0"
+                            Click="ChromeExtension_Click" />
                     <Button Content="⚙ Settings"
                             Style="{StaticResource ToolbarButtonStyle}"
                             Click="Settings_Click" />
@@ -67,14 +75,14 @@
                                Foreground="{StaticResource TextSecondaryBrush}"
                                VerticalAlignment="Center"
                                Margin="0,0,8,0" />
-                    <TextBox Width="220"
+                    <TextBox Width="200"
                              Text="{Binding SearchQuery, UpdateSourceTrigger=PropertyChanged}"
-                             ToolTip="Search downloads by file name, URL, or category" />
+                             ToolTip="Search downloads or torrents" />
                 </StackPanel>
             </DockPanel>
         </Border>
 
-        <!-- Clipboard URL Capture Banner -->
+        <!-- Clipboard Capture Banner -->
         <Border Grid.Row="1"
                 Background="#172554"
                 BorderBrush="{StaticResource AccentCyanBrush}"
@@ -99,7 +107,7 @@
                             Click="ClipboardDismiss_Click" />
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock Text="CLIPBOARD LINK DETECTED:"
+                    <TextBlock Text="{Binding ClipboardBannerLabel}"
                                Foreground="{StaticResource AccentCyanBrush}"
                                FontWeight="Bold"
                                FontSize="12"
@@ -112,10 +120,10 @@
             </DockPanel>
         </Border>
 
-        <!-- Main Body: Sidebar + Download Table & Inspector -->
+        <!-- Main Body -->
         <Grid Grid.Row="2">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="225" />
+                <ColumnDefinition Width="228" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
 
@@ -127,7 +135,7 @@
                     Padding="10,12">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel>
-                        <TextBlock Text="STATUS"
+                        <TextBlock Text="HTTP DOWNLOADS"
                                    Foreground="{StaticResource TextSecondaryBrush}"
                                    FontSize="11"
                                    FontWeight="Bold"
@@ -170,11 +178,42 @@
                             </Grid>
                         </RadioButton>
 
+                        <TextBlock Text="TORRENTS"
+                                   Foreground="{StaticResource AccentCyanBrush}"
+                                   FontSize="11"
+                                   FontWeight="Bold"
+                                   Margin="8,16,0,6" />
+
+                        <RadioButton Style="{StaticResource SidebarRadioStyle}" GroupName="Sidebar" Tag="TorrentsAll" Checked="SidebarFilter_Checked">
+                            <Grid>
+                                <TextBlock Text="All Torrents" />
+                                <TextBlock Text="{Binding TorrentsAllCount}" HorizontalAlignment="Right" Foreground="{StaticResource TextSecondaryBrush}" />
+                            </Grid>
+                        </RadioButton>
+                        <RadioButton Style="{StaticResource SidebarRadioStyle}" GroupName="Sidebar" Tag="TorrentsDownloading" Checked="SidebarFilter_Checked">
+                            <Grid>
+                                <TextBlock Text="Downloading" />
+                                <TextBlock Text="{Binding TorrentsDownloadingCount}" HorizontalAlignment="Right" Foreground="{StaticResource SuccessBrush}" />
+                            </Grid>
+                        </RadioButton>
+                        <RadioButton Style="{StaticResource SidebarRadioStyle}" GroupName="Sidebar" Tag="TorrentsSeeding" Checked="SidebarFilter_Checked">
+                            <Grid>
+                                <TextBlock Text="Seeding" />
+                                <TextBlock Text="{Binding TorrentsSeedingCount}" HorizontalAlignment="Right" Foreground="{StaticResource AccentCyanBrush}" />
+                            </Grid>
+                        </RadioButton>
+                        <RadioButton Style="{StaticResource SidebarRadioStyle}" GroupName="Sidebar" Tag="TorrentsPaused" Checked="SidebarFilter_Checked">
+                            <Grid>
+                                <TextBlock Text="Paused / Stopped" />
+                                <TextBlock Text="{Binding TorrentsPausedCount}" HorizontalAlignment="Right" Foreground="{StaticResource WarningBrush}" />
+                            </Grid>
+                        </RadioButton>
+
                         <TextBlock Text="CATEGORIES"
                                    Foreground="{StaticResource TextSecondaryBrush}"
                                    FontSize="11"
                                    FontWeight="Bold"
-                                   Margin="8,18,0,6" />
+                                   Margin="8,16,0,6" />
 
                         <RadioButton Style="{StaticResource SidebarRadioStyle}" GroupName="Sidebar" Tag="Programs" Checked="SidebarFilter_Checked">
                             <Grid>
@@ -222,8 +261,8 @@
                 </ScrollViewer>
             </Border>
 
-            <!-- Right Content: Downloads DataGrid + Bottom Details / Parallel Segments Panel -->
-            <Grid Grid.Column="1" Margin="10">
+            <!-- HTTP View -->
+            <Grid Grid.Column="1" Margin="10" Visibility="{Binding IsHttpView, Converter={StaticResource BoolToVis}}">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="*" MinHeight="180" />
                     <RowDefinition Height="6" />
@@ -301,7 +340,7 @@
                               Background="Transparent"
                               Cursor="SizeNS" />
 
-                <!-- Bottom Details & Live Parallel Segments Inspector -->
+                <!-- Bottom HTTP Details & Parallel Segments Map -->
                 <Grid Grid.Row="2">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="1.05*" />
@@ -309,7 +348,6 @@
                         <ColumnDefinition Width="1.35*" />
                     </Grid.ColumnDefinitions>
 
-                    <!-- Left: Selected Download Metadata -->
                     <Border Grid.Column="0"
                             Background="{StaticResource BgSurfaceBrush}"
                             BorderBrush="{StaticResource BorderBrushSubtle}"
@@ -337,7 +375,7 @@
                                                TextTrimming="CharacterEllipsis"
                                                Margin="0,0,0,6" />
                                     <TextBlock Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" TextTrimming="CharacterEllipsis" Margin="0,0,0,4">
-                                        <Run Text="URL: " Foreground="{StaticResource TextSecondaryBrush}" />
+                                        <Run Text="URL: " />
                                         <Run Text="{Binding Url, Mode=OneWay}" Foreground="{StaticResource AccentCyanBrush}" />
                                     </TextBlock>
                                     <TextBlock Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" TextTrimming="CharacterEllipsis" Margin="0,0,0,4">
@@ -368,7 +406,6 @@
                         </Grid>
                     </Border>
 
-                    <!-- Right: Live Parallel Segments Map -->
                     <Border Grid.Column="2"
                             Background="{StaticResource BgSurfaceBrush}"
                             BorderBrush="{StaticResource BorderBrushSubtle}"
@@ -395,7 +432,6 @@
                                            FontWeight="SemiBold" />
                             </Grid>
 
-                            <!-- IDM-style side-by-side visual segment progress strip -->
                             <Border Grid.Row="1"
                                     Background="#0F172A"
                                     BorderBrush="{StaticResource BorderBrushSubtle}"
@@ -424,7 +460,6 @@
                                 </ItemsControl>
                             </Border>
 
-                            <!-- Detailed Segment Rows -->
                             <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
                                 <ItemsControl ItemsSource="{Binding Segments}">
                                     <ItemsControl.ItemTemplate>
@@ -453,6 +488,182 @@
                     </Border>
                 </Grid>
             </Grid>
+
+            <!-- Torrents View -->
+            <Grid Grid.Column="1" Margin="10" Visibility="{Binding IsTorrentView, Converter={StaticResource BoolToVis}}">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*" MinHeight="180" />
+                    <RowDefinition Height="6" />
+                    <RowDefinition Height="240" MinHeight="160" />
+                </Grid.RowDefinitions>
+
+                <DataGrid x:Name="TorrentsGrid"
+                          Grid.Row="0"
+                          ItemsSource="{Binding FilteredTorrents}"
+                          SelectedItem="{Binding SelectedTorrent, Mode=TwoWay}">
+                    <DataGrid.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem Header="Start / Resume Torrent" Click="ResumeSelected_Click" />
+                            <MenuItem Header="Pause Torrent" Click="PauseSelected_Click" />
+                            <MenuItem Header="Toggle Sequential Order" Click="ToggleTorrentSequential_Click" />
+                            <Separator />
+                            <MenuItem Header="Open Save Folder" Click="OpenFolder_Click" />
+                            <MenuItem Header="Copy Magnet Link" Click="CopyMagnet_Click" />
+                            <Separator />
+                            <MenuItem Header="Remove Torrent (Keep Files)" Click="RemoveKeepFile_Click" />
+                            <MenuItem Header="Remove Torrent &amp; Delete Data" Click="RemoveDeleteFile_Click" />
+                        </ContextMenu>
+                    </DataGrid.ContextMenu>
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Torrent Name" Binding="{Binding Name}" Width="260" />
+                        <DataGridTextColumn Header="Size" Binding="{Binding SizeSummaryText}" Width="145" />
+                        <DataGridTemplateColumn Header="Progress" Width="170">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <Grid VerticalAlignment="Center">
+                                        <ProgressBar Value="{Binding ProgressPercent, Mode=OneWay}"
+                                                     Maximum="100"
+                                                     Height="18"
+                                                     Background="#0F172A"
+                                                     Foreground="{Binding StatusBrush}"
+                                                     BorderBrush="{StaticResource BorderBrushSubtle}"
+                                                     BorderThickness="1" />
+                                        <TextBlock Text="{Binding ProgressText}"
+                                                   HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center"
+                                                   FontSize="11"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="{StaticResource TextPrimaryBrush}" />
+                                    </Grid>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <DataGridTemplateColumn Header="Status" Width="110">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <Border Background="#0F172A" BorderBrush="{Binding StatusBrush}" BorderThickness="1" CornerRadius="4" Padding="6,2" HorizontalAlignment="Left">
+                                        <TextBlock Text="{Binding StatusDisplay}" Foreground="{Binding StatusBrush}" FontSize="11" FontWeight="SemiBold" />
+                                    </Border>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <DataGridTextColumn Header="Down Speed" Binding="{Binding DownloadSpeedText}" Width="95" />
+                        <DataGridTextColumn Header="Up Speed" Binding="{Binding UploadSpeedText}" Width="95" />
+                        <DataGridTextColumn Header="Peers (S/L)" Binding="{Binding PeersSummaryText}" Width="110" />
+                        <DataGridTextColumn Header="Ratio" Binding="{Binding RatioText}" Width="65" />
+                    </DataGrid.Columns>
+                </DataGrid>
+
+                <GridSplitter Grid.Row="1"
+                              Height="6"
+                              HorizontalAlignment="Stretch"
+                              VerticalAlignment="Center"
+                              Background="Transparent"
+                              Cursor="SizeNS" />
+
+                <!-- Torrent Details & Files List -->
+                <Grid Grid.Row="2">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="1.0*" />
+                        <ColumnDefinition Width="10" />
+                        <ColumnDefinition Width="1.4*" />
+                    </Grid.ColumnDefinitions>
+
+                    <Border Grid.Column="0"
+                            Background="{StaticResource BgSurfaceBrush}"
+                            BorderBrush="{StaticResource BorderBrushSubtle}"
+                            BorderThickness="1"
+                            CornerRadius="6"
+                            Padding="12">
+                        <Grid DataContext="{Binding SelectedTorrent}">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Text="TORRENT DETAILS"
+                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                       FontSize="11"
+                                       FontWeight="Bold"
+                                       Margin="0,0,0,8" />
+
+                            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                                <StackPanel>
+                                    <TextBlock Text="{Binding Name, TargetNullValue=Select a torrent to inspect details}"
+                                               FontWeight="SemiBold"
+                                               FontSize="14"
+                                               TextTrimming="CharacterEllipsis"
+                                               Margin="0,0,0,6" />
+                                    <TextBlock Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" TextTrimming="CharacterEllipsis" Margin="0,0,0,4">
+                                        <Run Text="InfoHash: " />
+                                        <Run Text="{Binding InfoHashHex, Mode=OneWay}" Foreground="{StaticResource AccentCyanBrush}" />
+                                    </TextBlock>
+                                    <TextBlock Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" TextTrimming="CharacterEllipsis" Margin="0,0,0,4">
+                                        <Run Text="Save Folder: " />
+                                        <Run Text="{Binding SaveDirectory, Mode=OneWay}" Foreground="{StaticResource TextPrimaryBrush}" />
+                                    </TextBlock>
+                                    <TextBlock Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" Margin="0,0,0,4">
+                                        <Run Text="Sequential Order: " />
+                                        <Run Text="{Binding Sequential, Mode=OneWay}" Foreground="{StaticResource TextPrimaryBrush}" />
+                                    </TextBlock>
+                                    <TextBlock Text="{Binding ErrorMessage}"
+                                               Foreground="{StaticResource DangerBrush}"
+                                               FontSize="12"
+                                               TextWrapping="Wrap"
+                                               Margin="0,4,0,0" />
+                                </StackPanel>
+                            </ScrollViewer>
+
+                            <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,8,0,0">
+                                <Button Content="Open Folder" Style="{StaticResource ToolbarButtonStyle}" Padding="10,4" Margin="0,0,6,0" Click="OpenFolder_Click" />
+                                <Button Content="Copy Magnet" Style="{StaticResource ToolbarButtonStyle}" Padding="10,4" Margin="0,0,6,0" Click="CopyMagnet_Click" />
+                                <Button Content="Toggle Sequential" Style="{StaticResource ToolbarButtonStyle}" Padding="10,4" Click="ToggleTorrentSequential_Click" />
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <Border Grid.Column="2"
+                            Background="{StaticResource BgSurfaceBrush}"
+                            BorderBrush="{StaticResource BorderBrushSubtle}"
+                            BorderThickness="1"
+                            CornerRadius="6"
+                            Padding="12">
+                        <Grid DataContext="{Binding SelectedTorrent}">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Text="TORRENT FILES (Right-click file to change priority)"
+                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                       FontSize="11"
+                                       FontWeight="Bold"
+                                       Margin="0,0,0,8" />
+
+                            <DataGrid x:Name="TorrentFilesGrid"
+                                      Grid.Row="1"
+                                      ItemsSource="{Binding Files}"
+                                      RowHeight="30">
+                                <DataGrid.ContextMenu>
+                                    <ContextMenu>
+                                        <MenuItem Header="Priority: High" Tag="High" Click="SetTorrentFilePriority_Click" />
+                                        <MenuItem Header="Priority: Normal" Tag="Normal" Click="SetTorrentFilePriority_Click" />
+                                        <MenuItem Header="Priority: Low" Tag="Low" Click="SetTorrentFilePriority_Click" />
+                                        <MenuItem Header="Skip File (Do Not Download)" Tag="DoNotDownload" Click="SetTorrentFilePriority_Click" />
+                                    </ContextMenu>
+                                </DataGrid.ContextMenu>
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="File" Binding="{Binding Path}" Width="*" />
+                                    <DataGridTextColumn Header="Size" Binding="{Binding SizeText}" Width="90" />
+                                    <DataGridTextColumn Header="Done" Binding="{Binding ProgressText}" Width="65" />
+                                    <DataGridTextColumn Header="Priority" Binding="{Binding PriorityText}" Width="105" />
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </Grid>
+                    </Border>
+                </Grid>
+            </Grid>
         </Grid>
 
         <!-- Bottom Status Bar -->
@@ -466,8 +677,8 @@
                     <TextBlock Text="Total Speed:" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,6,0" />
                     <TextBlock Text="{Binding TotalSpeedText}" Foreground="{StaticResource AccentCyanBrush}" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,16,0" />
 
-                    <TextBlock Text="Speed Limit:" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,6,0" />
-                    <ComboBox Width="115"
+                    <TextBlock Text="HTTP Limit:" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,6,0" />
+                    <ComboBox Width="112"
                               ItemsSource="{Binding SpeedPresets}"
                               SelectedItem="{Binding SelectedSpeedLimit, Mode=TwoWay}"
                               DisplayMemberPath="Label"

@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>VelocityDM Companion</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 14px;
+      width: 300px;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background: #0b1120;
+      color: #f8fafc;
+      font-size: 13px;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .header img {
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+    }
+    .title {
+      font-weight: 700;
+      font-size: 15px;
+    }
+    .status-pill {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: #111827;
+      border: 1px solid #334155;
+      border-radius: 6px;
+      padding: 8px 10px;
+      margin-bottom: 12px;
+      font-size: 12px;
+    }
+    .dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: #ef4444;
+    }
+    .dot.online {
+      background: #10b981;
+    }
+    .row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 7px 0;
+      border-bottom: 1px solid #1e293b;
+    }
+    select, input[type="number"] {
+      background: #1e293b;
+      color: #f8fafc;
+      border: 1px solid #334155;
+      border-radius: 5px;
+      padding: 4px 6px;
+      font-size: 12px;
+    }
+    .btn {
+      width: 100%;
+      margin-top: 12px;
+      padding: 8px 10px;
+      border: none;
+      border-radius: 6px;
+      background: #2563eb;
+      color: #fff;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .btn:hover {
+      background: #1d4ed8;
+    }
+    .hint {
+      margin-top: 10px;
+      color: #94a3b8;
+      font-size: 11px;
+      line-height: 1.4;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <img src="icon128.png" alt="VelocityDM" />
+    <div>
+      <div class="title">VelocityDM</div>
+      <div style="font-size:11px;color:#38bdf8;">Chrome Integration</div>
+    </div>
+  </div>
+
+  <div class="status-pill">
+    <span id="statusDot" class="dot"></span>
+    <span id="statusText">Checking VelocityDM...</span>
+  </div>
+
+  <div class="row">
+    <label for="enabledToggle">Intercept Chrome downloads</label>
+    <input id="enabledToggle" type="checkbox" />
+  </div>
+
+  <div class="row">
+    <label for="autoStartToggle">Start immediately (no popup)</label>
+    <input id="autoStartToggle" type="checkbox" />
+  </div>
+
+  <div class="row">
+    <label for="minSizeSelect">Minimum size</label>
+    <select id="minSizeSelect">
+      <option value="0">All files</option>
+      <option value="102400">&ge; 100 KB</option>
+      <option value="1048576">&ge; 1 MB</option>
+      <option value="5242880">&ge; 5 MB</option>
+    </select>
+  </div>
+
+  <button id="openAppBtn" class="btn">Open / Bring VelocityDM to Front</button>
+  <div class="hint">Right-click any link, video, audio, or image and choose <strong>Download with VelocityDM</strong>.</div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

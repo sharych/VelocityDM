@@ -37,7 +37,25 @@ public sealed class AppSettings
 
     public int RequestTimeoutSeconds { get; set; } = 30;
 
-    public string UserAgent { get; set; } = "VelocityDM/1.0 (Windows NT; Multi-Segment)";
+    public string UserAgent { get; set; } = "VelocityDM/2.0 (Windows NT; Multi-Segment)";
+
+    public bool MinimizeToTrayOnClose { get; set; } = true;
+
+    public bool StartMinimizedToTray { get; set; } = false;
+
+    public bool LaunchAtWindowsStartup { get; set; } = false;
+
+    public int BrowserBridgePort { get; set; } = 17890;
+
+    public bool AutoStartBrowserDownloads { get; set; } = false;
+
+    public long TorrentDownloadSpeedLimitBytesPerSec { get; set; } = 0;
+
+    public long TorrentUploadSpeedLimitBytesPerSec { get; set; } = 0;
+
+    public int TorrentMaxConnections { get; set; } = 80;
+
+    public bool StopSeedingWhenComplete { get; set; } = false;
 
     public AppSettings Clone() => new()
     {
@@ -52,7 +70,16 @@ public sealed class AppSettings
         MaxRetriesPerSegment = MaxRetriesPerSegment,
         BufferSizeBytes = BufferSizeBytes,
         RequestTimeoutSeconds = RequestTimeoutSeconds,
-        UserAgent = UserAgent
+        UserAgent = UserAgent,
+        MinimizeToTrayOnClose = MinimizeToTrayOnClose,
+        StartMinimizedToTray = StartMinimizedToTray,
+        LaunchAtWindowsStartup = LaunchAtWindowsStartup,
+        BrowserBridgePort = BrowserBridgePort,
+        AutoStartBrowserDownloads = AutoStartBrowserDownloads,
+        TorrentDownloadSpeedLimitBytesPerSec = TorrentDownloadSpeedLimitBytesPerSec,
+        TorrentUploadSpeedLimitBytesPerSec = TorrentUploadSpeedLimitBytesPerSec,
+        TorrentMaxConnections = TorrentMaxConnections,
+        StopSeedingWhenComplete = StopSeedingWhenComplete
     };
 
     public void Normalize()
@@ -71,5 +98,9 @@ public sealed class AppSettings
         MaxRetriesPerSegment = Math.Clamp(MaxRetriesPerSegment, 0, 20);
         BufferSizeBytes = Math.Clamp(BufferSizeBytes, 8192, 1024 * 1024);
         RequestTimeoutSeconds = Math.Clamp(RequestTimeoutSeconds, 5, 300);
+        BrowserBridgePort = Math.Clamp(BrowserBridgePort, 1024, 65535);
+        TorrentDownloadSpeedLimitBytesPerSec = Math.Max(0, TorrentDownloadSpeedLimitBytesPerSec);
+        TorrentUploadSpeedLimitBytesPerSec = Math.Max(0, TorrentUploadSpeedLimitBytesPerSec);
+        TorrentMaxConnections = Math.Clamp(TorrentMaxConnections, 10, 500);
     }
 }

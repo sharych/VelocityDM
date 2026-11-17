@@ -3,91 +3,133 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="VelocityDM Settings"
         Icon="pack://application:,,,/Assets/VelocityDM.ico"
-        Width="560"
-        SizeToContent="Height"
+        Width="620"
+        Height="660"
         WindowStartupLocation="CenterOwner"
-        ResizeMode="NoResize"
+        ResizeMode="CanMinimize"
         Background="{StaticResource BgWindowBrush}">
     <Grid Margin="20">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <StackPanel Grid.Row="0" Margin="0,0,0,12">
-            <TextBlock Text="Default Download Folder" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" Margin="0,0,0,5" />
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <TextBox x:Name="DefaultFolderTextBox" />
-                <Button Grid.Column="1" Content="Browse..." Margin="8,0,0,0" Style="{StaticResource ToolbarButtonStyle}" Click="Browse_Click" />
-            </Grid>
-        </StackPanel>
+        <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto" Padding="0,0,6,0">
+            <StackPanel>
+                <!-- General & HTTP -->
+                <TextBlock Text="HTTP DOWNLOADS &amp; STORAGE" Foreground="{StaticResource AccentCyanBrush}" FontWeight="Bold" FontSize="11" Margin="0,0,0,8" />
 
-        <CheckBox x:Name="CategorizeCheckBox"
-                  Grid.Row="1"
-                  Content="Organize downloads into category subfolders (Programs, Compressed, Video, Music, Documents, Images)"
-                  Margin="0,0,0,14" />
+                <StackPanel Margin="0,0,0,10">
+                    <TextBlock Text="Default Download Folder" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" Margin="0,0,0,5" />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBox x:Name="DefaultFolderTextBox" />
+                        <Button Grid.Column="1" Content="Browse..." Margin="8,0,0,0" Style="{StaticResource ToolbarButtonStyle}" Click="Browse_Click" />
+                    </Grid>
+                </StackPanel>
 
-        <Grid Grid.Row="2" Margin="0,0,0,14">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="16" />
-                <ColumnDefinition Width="*" />
-            </Grid.ColumnDefinitions>
-            <StackPanel Grid.Column="0">
-                <Grid Margin="0,0,0,4">
-                    <TextBlock Text="Default Segments / File" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" />
-                    <TextBlock x:Name="ConnectionsLabel" HorizontalAlignment="Right" Foreground="{StaticResource AccentCyanBrush}" FontWeight="SemiBold" FontSize="12" />
+                <CheckBox x:Name="CategorizeCheckBox"
+                          Content="Organize downloads into category subfolders (Programs, Compressed, Video, Music, Docs, Images)"
+                          Margin="0,0,0,12" />
+
+                <Grid Margin="0,0,0,12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="16" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0">
+                        <Grid Margin="0,0,0,4">
+                            <TextBlock Text="Default Segments / File" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" />
+                            <TextBlock x:Name="ConnectionsLabel" HorizontalAlignment="Right" Foreground="{StaticResource AccentCyanBrush}" FontWeight="SemiBold" FontSize="12" />
+                        </Grid>
+                        <Slider x:Name="ConnectionsSlider" Minimum="1" Maximum="32" TickFrequency="1" IsSnapToTickEnabled="True" ValueChanged="ConnectionsSlider_ValueChanged" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="2">
+                        <Grid Margin="0,0,0,4">
+                            <TextBlock Text="Max Concurrent Downloads" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" />
+                            <TextBlock x:Name="ConcurrentLabel" HorizontalAlignment="Right" Foreground="{StaticResource AccentCyanBrush}" FontWeight="SemiBold" FontSize="12" />
+                        </Grid>
+                        <Slider x:Name="ConcurrentSlider" Minimum="1" Maximum="16" TickFrequency="1" IsSnapToTickEnabled="True" ValueChanged="ConcurrentSlider_ValueChanged" />
+                    </StackPanel>
                 </Grid>
-                <Slider x:Name="ConnectionsSlider" Minimum="1" Maximum="32" TickFrequency="1" IsSnapToTickEnabled="True" ValueChanged="ConnectionsSlider_ValueChanged" />
-            </StackPanel>
-            <StackPanel Grid.Column="2">
-                <Grid Margin="0,0,0,4">
-                    <TextBlock Text="Max Concurrent Downloads" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" />
-                    <TextBlock x:Name="ConcurrentLabel" HorizontalAlignment="Right" Foreground="{StaticResource AccentCyanBrush}" FontWeight="SemiBold" FontSize="12" />
+
+                <Grid Margin="0,0,0,14">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="16" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0">
+                        <TextBlock Text="HTTP Speed Limit (KB/s, 0 = Unlimited)" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" Margin="0,0,0,5" />
+                        <TextBox x:Name="SpeedLimitKbTextBox" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="2">
+                        <TextBlock Text="Max Retries per Segment" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" Margin="0,0,0,5" />
+                        <TextBox x:Name="MaxRetriesTextBox" />
+                    </StackPanel>
                 </Grid>
-                <Slider x:Name="ConcurrentSlider" Minimum="1" Maximum="16" TickFrequency="1" IsSnapToTickEnabled="True" ValueChanged="ConcurrentSlider_ValueChanged" />
+
+                <!-- Background & System Tray -->
+                <TextBlock Text="BACKGROUND &amp; SYSTEM TRAY (IDM MODE)" Foreground="{StaticResource AccentCyanBrush}" FontWeight="Bold" FontSize="11" Margin="0,6,0,8" />
+                <CheckBox x:Name="MinimizeToTrayCheckBox" Content="Keep running in System Tray when closing window (background downloads &amp; Chrome bridge)" Margin="0,0,0,7" />
+                <CheckBox x:Name="StartMinimizedCheckBox" Content="Start minimized to System Tray when launched with --minimized" Margin="0,0,0,7" />
+                <CheckBox x:Name="LaunchAtStartupCheckBox" Content="Start VelocityDM automatically when Windows starts (background tray)" Margin="0,0,0,7" />
+                <CheckBox x:Name="AutoStartQueueCheckBox" Content="Automatically resume queued downloads &amp; active torrents on startup" Margin="0,0,0,14" />
+
+                <!-- Clipboard & Chrome -->
+                <TextBlock Text="CLIPBOARD &amp; CHROME EXTENSION" Foreground="{StaticResource AccentCyanBrush}" FontWeight="Bold" FontSize="11" Margin="0,4,0,8" />
+                <CheckBox x:Name="ClipboardEnabledCheckBox" Content="Enable Windows Clipboard Monitor (HTTP links &amp; magnet:? URIs)" Margin="0,0,0,7" />
+                <CheckBox x:Name="ClipboardKnownExtCheckBox" Content="Clipboard HTTP links: only alert on known downloadable file extensions" Margin="20,0,0,10" />
+                <CheckBox x:Name="AutoStartBrowserCheckBox" Content="Chrome Extension: auto-start intercepted downloads without showing popup" Margin="0,0,0,10" />
+
+                <Grid Margin="0,0,0,14">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0">
+                        <TextBlock Text="Local Browser Bridge Port (default 17890)" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" Margin="0,0,0,4" />
+                        <TextBox x:Name="BridgePortTextBox" Width="160" HorizontalAlignment="Left" />
+                    </StackPanel>
+                    <Button Grid.Column="1"
+                            Content="Setup Chrome Extension..."
+                            VerticalAlignment="Bottom"
+                            Style="{StaticResource ToolbarButtonStyle}"
+                            Click="ChromeSetup_Click" />
+                </Grid>
+
+                <!-- Torrents -->
+                <TextBlock Text="TORRENT ENGINE" Foreground="{StaticResource AccentCyanBrush}" FontWeight="Bold" FontSize="11" Margin="0,4,0,8" />
+                <Grid Margin="0,0,0,10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="12" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="12" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0">
+                        <TextBlock Text="Max DL (KB/s, 0=Unl)" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" Margin="0,0,0,4" />
+                        <TextBox x:Name="TorrentDlLimitTextBox" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="2">
+                        <TextBlock Text="Max UL (KB/s, 0=Unl)" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" Margin="0,0,0,4" />
+                        <TextBox x:Name="TorrentUlLimitTextBox" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="4">
+                        <TextBlock Text="Max Connections" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" Margin="0,0,0,4" />
+                        <TextBox x:Name="TorrentMaxConnTextBox" />
+                    </StackPanel>
+                </Grid>
+                <CheckBox x:Name="StopSeedingCheckBox" Content="Stop seeding automatically once torrent reaches 100%" Margin="0,0,0,10" />
             </StackPanel>
-        </Grid>
+        </ScrollViewer>
 
-        <Grid Grid.Row="3" Margin="0,0,0,14">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="16" />
-                <ColumnDefinition Width="*" />
-            </Grid.ColumnDefinitions>
-            <StackPanel Grid.Column="0">
-                <TextBlock Text="Global Speed Limit (KB/s, 0 = Unlimited)" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" Margin="0,0,0,5" />
-                <TextBox x:Name="SpeedLimitKbTextBox" />
-            </StackPanel>
-            <StackPanel Grid.Column="2">
-                <TextBlock Text="Max Retries per Segment" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" Margin="0,0,0,5" />
-                <TextBox x:Name="MaxRetriesTextBox" />
-            </StackPanel>
-        </Grid>
-
-        <StackPanel Grid.Row="4" Margin="0,0,0,14">
-            <CheckBox x:Name="ClipboardEnabledCheckBox" Content="Enable Windows Clipboard URL Monitor" Margin="0,0,0,8" />
-            <CheckBox x:Name="ClipboardKnownExtCheckBox" Content="Clipboard monitor: only alert on known downloadable file extensions (.zip, .exe, .mp4, .iso, etc.)" Margin="20,0,0,8" />
-            <CheckBox x:Name="AutoStartQueueCheckBox" Content="Automatically resume queued downloads on startup" />
-        </StackPanel>
-
-        <TextBlock Grid.Row="5"
-                   Text="Note: Crashed or interrupted active downloads are safely preserved in Paused state and can be resumed from exact byte offsets."
-                   Foreground="{StaticResource TextSecondaryBrush}"
-                   FontSize="11"
-                   TextWrapping="Wrap"
-                   Margin="0,0,0,16" />
-
-        <StackPanel Grid.Row="6" Orientation="Horizontal" HorizontalAlignment="Right">
+        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
             <Button Content="Cancel" Style="{StaticResource ToolbarButtonStyle}" MinWidth="90" Margin="0,0,10,0" IsCancel="True" />
             <Button Content="Save Settings" Style="{StaticResource PrimaryButtonStyle}" MinWidth="130" IsDefault="True" Click="Save_Click" />
         </StackPanel>

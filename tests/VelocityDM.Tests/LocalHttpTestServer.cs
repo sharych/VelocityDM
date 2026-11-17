@@ -25,6 +25,8 @@ public sealed class LocalHttpTestServer : IAsyncDisposable
         public string? RedirectToPath { get; set; }
         public int ObservedRangeGetCount;
         public int ObservedTotalGetCount;
+        public string? LastCookieHeader;
+        public string? LastRefererHeader;
     }
 
     private readonly TcpListener _listener;
@@ -133,6 +135,8 @@ public sealed class LocalHttpTestServer : IAsyncDisposable
 
             long totalLength = route.Payload.Length;
             bool hasRange = headers.TryGetValue("Range", out var rangeValue);
+            if (headers.TryGetValue("Cookie", out var cookieVal)) route.LastCookieHeader = cookieVal;
+            if (headers.TryGetValue("Referer", out var refVal)) route.LastRefererHeader = refVal;
 
             if (method == "GET")
             {

@@ -18,6 +18,7 @@ public sealed class JsonStateStore
     private readonly SemaphoreSlim _ioLock = new(1, 1);
     private readonly string _downloadsFilePath;
     private readonly string _settingsFilePath;
+    private readonly string _torrentsFilePath;
 
     public JsonStateStore(string? storageDirectory = null)
     {
@@ -29,6 +30,7 @@ public sealed class JsonStateStore
         StorageDirectory = baseDir;
         _downloadsFilePath = Path.Combine(baseDir, "downloads.json");
         _settingsFilePath = Path.Combine(baseDir, "settings.json");
+        _torrentsFilePath = Path.Combine(baseDir, "torrents.json");
     }
 
     public string StorageDirectory { get; }
@@ -98,6 +100,34 @@ public sealed class JsonStateStore
     {
         var snapshot = tasks.Select(t => t.CloneSnapshot()).ToList();
         await WriteAtomicJsonAsync(_downloadsFilePath, snapshot, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<List<TorrentRecord>> LoadTorrentsAsync(CancellationToken cancellationToken = default)
+    {
+        await _ioLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (!File.Exists(_torrentsFilePath))
+                return new List<TorrentRecord>();
+
+            await using var stream = File.OpenRead(_torrentsFilePath);
+            return await JsonSerializer.DeserializeAsync<List<TorrentRecord>>(stream, JsonOptions, cancellationToken)
+                .ConfigureAwait(false) ?? new List<TorrentRecord>();
+        }
+        catch
+        {
+            return new List<TorrentRecord>();
+        }
+        finally
+        {
+            _ioLock.Release();
+        }
+    }
+
+    public async Task SaveTorrentsAsync(IEnumerable<TorrentRecord> records, CancellationToken cancellationToken = default)
+    {
+        var list = records.ToList();
+        await WriteAtomicJsonAsync(_torrentsFilePath, list, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>

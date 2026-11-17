@@ -10,7 +10,10 @@ public sealed record AddDownloadOptions(
     FileCategory? CategoryOverride = null,
     int? Connections = null,
     string? ExpectedSha256 = null,
-    bool StartImmediately = true);
+    bool StartImmediately = true,
+    string? Referrer = null,
+    string? CookieHeader = null,
+    string? UserAgentOverride = null);
 
 /// <summary>
 /// Orchestrates queue scheduling, concurrent download limits, pause/resume/cancel, persistence, and settings.
@@ -146,6 +149,9 @@ public sealed class DownloadManagerService : IAsyncDisposable
                 HasCustomCategory = options.CategoryOverride.HasValue,
                 MaxConnections = Math.Clamp(options.Connections ?? currentSettings.DefaultConnectionsPerDownload, 1, 32),
                 ExpectedSha256 = HashService.NormalizeHex(options.ExpectedSha256),
+                Referrer = options.Referrer,
+                CookieHeader = options.CookieHeader,
+                UserAgentOverride = options.UserAgentOverride,
                 Status = options.StartImmediately ? DownloadStatus.Queued : DownloadStatus.Paused,
                 CreatedAt = DateTimeOffset.UtcNow,
                 QueueOrder = _nextQueueOrder++

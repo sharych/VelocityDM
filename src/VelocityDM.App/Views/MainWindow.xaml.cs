@@ -1,6 +1,8 @@
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using MonoTorrent;
 using VelocityDM.App.Helpers;
 using VelocityDM.App.ViewModels;
 using VelocityDM.Core.Models;
@@ -11,6 +13,8 @@ public partial class MainWindow : Window
 {
     private readonly MainViewModel _viewModel;
     private readonly ClipboardMonitor _clipboardMonitor;
+
+    public bool AllowExplicitClose { get; set; }
 
     public MainWindow(MainViewModel viewModel)
     {
@@ -44,19 +48,90 @@ public partial class MainWindow : Window
         Closed += (_, _) => _clipboardMonitor.Dispose();
     }
 
-    private async void AddUrl_Click(object sender, RoutedEventArgs e)
+    protected override void OnClosing(CancelEventArgs e)
     {
-        await ShowAddDialogAsync(prefillUrl: null);
+        if (!AllowExplicitClose && _viewModel.Manager.Settings.MinimizeToTrayOnClose)
+        {
+            e.Cancel = true;
+            Hide();
+            return;
+        }
+        base.OnClosing(e);
     }
 
-    private async Task ShowAddDialogAsync(string? prefillUrl)
+    public void RestoreFromTray()
     {
-        var dialog = new AddDownloadWindow(_viewModel.Manager, prefillUrl) { Owner = this };
+        if (!IsVisible) Show();
+        if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
+        Activate();
+        Topmost = true;
+        Topmost = false;
+        Focus();
+    }
+
+    public async Task ShowAddUrlDialogAsync(
+        string? prefillUrl = null,
+        string? customFileName = null,
+        string? referrer = null,
+        string? cookies = null,
+        string? userAgent = null)
+    {
+        var dialog = new AddDownloadWindow(_viewModel.Manager, prefillUrl);
+        if (IsVisible) dialog.Owner = this;
+
         if (dialog.ShowDialog() == true && dialog.ResultOptions != null)
         {
-            await _viewModel.Manager.AddDownloadAsync(dialog.ResultOptions);
+            var opts = dialog.ResultOptions with
+            {
+                CustomFileName = dialog.ResultOptions.CustomFileName ?? customFileName,
+                Referrer = referrer,
+                CookieHeader = cookies,
+                UserAgentOverride = userAgent
+            };
+            await _viewModel.Manager.AddDownloadAsync(opts);
         }
     }
+
+    public async Task ShowAddTorrentDialogAsync(string? prefillSource = null)
+    {
+        var dialog = new AddTorrentWindow(_viewModel.Manager.Settings, prefillSource);
+        if (IsVisible) dialog.Owner = this;
+
+        if (dialog.ShowDialog() == true)
+        {
+            try
+            {
+                if (dialog.IsTorrentFile)
+                {
+                    await _viewModel.TorrentManager.AddTorrentFileAsync(
+                        dialog.Source,
+                        dialog.SaveDirectory,
+                        dialog.Sequential,
+                        dialog.StartImmediately);
+                }
+                else
+                {
+                    await _viewModel.TorrentManager.AddMagnetAsync(
+                        dialog.Source,
+                        dialog.SaveDirectory,
+                        dialog.Sequential,
+                        dialog.StartImmediately);
+                }
+
+                _viewModel.ActiveFilter = SidebarFilter.TorrentsAll;
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, ex.Message, "Add Torrent Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+    }
+
+    private async void AddUrl_Click(object sender, RoutedEventArgs e) =>
+        await ShowAddUrlDialogAsync();
+
+    private async void AddTorrent_Click(object sender, RoutedEventArgs e) =>
+        await ShowAddTorrentDialogAsync();
 
     private async void BatchImport_Click(object sender, RoutedEventArgs e)
     {
@@ -88,19 +163,17 @@ public partial class MainWindow : Window
 
     private async void RemoveSelected_Click(object sender, RoutedEventArgs e)
     {
-        if (_viewModel.SelectedItem == null)
-            return;
+        string? name = _viewModel.IsTorrentView ? _viewModel.SelectedTorrent?.Name : _viewModel.SelectedItem?.FileName;
+        if (string.IsNullOrEmpty(name)) return;
 
         var result = MessageBox.Show(
             this,
-            $"Remove '{_viewModel.SelectedItem.FileName}' from list?\n\nChoose YES to also delete the file from disk, NO to keep the file and remove only the entry.",
-            "Remove Download",
+            $"Remove '{name}' from list?\n\nChoose YES to also delete downloaded data from disk, NO to keep downloaded files and remove only the entry.",
+            "Remove Item",
             MessageBoxButton.YesNoCancel,
             MessageBoxImage.Question);
 
-        if (result == MessageBoxResult.Cancel)
-            return;
-
+        if (result == MessageBoxResult.Cancel) return;
         await _viewModel.RemoveSelectedAsync(deleteFiles: result == MessageBoxResult.Yes);
     }
 
@@ -135,8 +208,46 @@ public partial class MainWindow : Window
         }
     }
 
+    private void CopyMagnet_Click(object sender, RoutedEventArgs e)
+    {
+        if (_viewModel.SelectedTorrent?.MagnetUri != null)
+        {
+            _clipboardMonitor.SuppressUrlTemporarily(_viewModel.SelectedTorrent.MagnetUri);
+            Clipboard.SetText(_viewModel.SelectedTorrent.MagnetUri);
+            _viewModel.StatusMessage = "Magnet link copied to clipboard.";
+        }
+    }
+
+    private async void ToggleTorrentSequential_Click(object sender, RoutedEventArgs e)
+    {
+        if (_viewModel.SelectedTorrent == null) return;
+        await _viewModel.TorrentManager.SetSequentialAsync(
+            _viewModel.SelectedTorrent.Id,
+            !_viewModel.SelectedTorrent.Sequential);
+    }
+
+    private async void SetTorrentFilePriority_Click(object sender, RoutedEventArgs e)
+    {
+        if (_viewModel.SelectedTorrent == null ||
+            TorrentFilesGrid.SelectedItem is not TorrentFileViewModel fileVm ||
+            sender is not MenuItem mi ||
+            mi.Tag is not string tag ||
+            !Enum.TryParse<Priority>(tag, out var priority))
+        {
+            return;
+        }
+
+        await _viewModel.TorrentManager.SetFilePriorityAsync(_viewModel.SelectedTorrent.Id, fileVm.Path, priority);
+    }
+
     private async void VerifySha256_Click(object sender, RoutedEventArgs e) =>
         await _viewModel.VerifySelectedSha256Async();
+
+    private void ChromeExtension_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new ChromeExtensionWindow { Owner = this };
+        dialog.ShowDialog();
+    }
 
     private async void Settings_Click(object sender, RoutedEventArgs e)
     {
@@ -154,9 +265,15 @@ public partial class MainWindow : Window
     {
         var url = _viewModel.PendingClipboardUrl;
         _viewModel.PendingClipboardUrl = null;
-        if (!string.IsNullOrWhiteSpace(url))
+        if (string.IsNullOrWhiteSpace(url)) return;
+
+        if (url.StartsWith("magnet:?", StringComparison.OrdinalIgnoreCase))
         {
-            await ShowAddDialogAsync(url);
+            await ShowAddTorrentDialogAsync(url);
+        }
+        else
+        {
+            await ShowAddUrlDialogAsync(url);
         }
     }
 
@@ -165,21 +282,14 @@ public partial class MainWindow : Window
 
     private async void DownloadsGrid_MouseDoubleClick(object sender, MouseButtonEventArgs e)
     {
-        if (_viewModel.SelectedItem == null)
-            return;
+        if (_viewModel.SelectedItem == null) return;
 
         if (_viewModel.SelectedItem.Status == DownloadStatus.Completed)
-        {
             _viewModel.OpenSelectedFile();
-        }
         else if (_viewModel.SelectedItem.Status is DownloadStatus.Paused or DownloadStatus.Error)
-        {
             await _viewModel.ResumeSelectedAsync();
-        }
         else if (_viewModel.SelectedItem.Status == DownloadStatus.Downloading)
-        {
             await _viewModel.PauseSelectedAsync();
-        }
     }
 
     private void SidebarFilter_Checked(object sender, RoutedEventArgs e)

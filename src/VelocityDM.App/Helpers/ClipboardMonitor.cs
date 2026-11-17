@@ -6,7 +6,7 @@ using VelocityDM.Core.Services;
 namespace VelocityDM.App.Helpers;
 
 /// <summary>
-/// Watches Windows clipboard updates via AddClipboardFormatListener and raises UrlDetected for HTTP(S) links.
+/// Watches Windows clipboard updates via AddClipboardFormatListener and raises UrlDetected for HTTP(S) or magnet links.
 /// </summary>
 public sealed class ClipboardMonitor : IDisposable
 {
@@ -54,32 +54,40 @@ public sealed class ClipboardMonitor : IDisposable
     {
         try
         {
-            if (!Clipboard.ContainsText())
+            if (!System.Windows.Clipboard.ContainsText())
                 return;
 
-            string raw = Clipboard.GetText().Trim();
+            string raw = System.Windows.Clipboard.GetText().Trim();
             if (string.IsNullOrWhiteSpace(raw) || raw.Contains('\n') || raw.Contains('\r'))
                 return;
 
-            if (!Uri.TryCreate(raw, UriKind.Absolute, out var uri) ||
-                (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+            string? candidate = null;
+            if (raw.StartsWith("magnet:?xt=", StringComparison.OrdinalIgnoreCase))
             {
-                return;
+                candidate = raw;
+            }
+            else if (Uri.TryCreate(raw, UriKind.Absolute, out var uri) &&
+                (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps))
+            {
+                if (!OnlyKnownFileExtensions || FileCategoryClassifier.IsKnownDownloadableExtension(uri.AbsoluteUri))
+                {
+                    candidate = uri.AbsoluteUri;
+                }
             }
 
-            if (OnlyKnownFileExtensions && !FileCategoryClassifier.IsKnownDownloadableExtension(uri.AbsoluteUri))
+            if (string.IsNullOrWhiteSpace(candidate))
                 return;
 
             var now = DateTimeOffset.UtcNow;
-            if (string.Equals(_lastSeenUrl, uri.AbsoluteUri, StringComparison.OrdinalIgnoreCase) &&
+            if (string.Equals(_lastSeenUrl, candidate, StringComparison.OrdinalIgnoreCase) &&
                 (now - _lastSeenTime).TotalSeconds < 5)
             {
                 return;
             }
 
-            _lastSeenUrl = uri.AbsoluteUri;
+            _lastSeenUrl = candidate;
             _lastSeenTime = now;
-            UrlDetected?.Invoke(uri.AbsoluteUri);
+            UrlDetected?.Invoke(candidate);
         }
         catch
         {

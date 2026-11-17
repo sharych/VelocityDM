@@ -29,7 +29,12 @@ public sealed class HttpProbeService
         _httpClient = httpClient;
     }
 
-    public async Task<ProbeResult> ProbeAsync(string url, CancellationToken cancellationToken = default)
+    public async Task<ProbeResult> ProbeAsync(
+        string url,
+        CancellationToken cancellationToken = default,
+        string? referrer = null,
+        string? cookieHeader = null,
+        string? userAgent = null)
     {
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
             (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
@@ -49,7 +54,7 @@ public sealed class HttpProbeService
 
         try
         {
-            using var headRequest = new HttpRequestMessage(HttpMethod.Head, uri);
+            using var headRequest = BuildRequest(HttpMethod.Head, uri, referrer, cookieHeader, userAgent);
             using var headResponse = await _httpClient.SendAsync(
                 headRequest,
                 HttpCompletionOption.ResponseHeadersRead,
@@ -102,7 +107,7 @@ public sealed class HttpProbeService
 
         if (needRangeProbe)
         {
-            using var rangeRequest = new HttpRequestMessage(HttpMethod.Get, finalUrl);
+            using var rangeRequest = BuildRequest(HttpMethod.Get, new Uri(finalUrl), referrer, cookieHeader, userAgent);
             rangeRequest.Headers.Range = new RangeHeaderValue(0, 0);
 
             using var rangeResponse = await _httpClient.SendAsync(
@@ -113,7 +118,7 @@ public sealed class HttpProbeService
             if (rangeResponse.StatusCode == HttpStatusCode.RequestedRangeNotSatisfiable)
             {
                 // Possible zero-byte file: retry normal GET header check
-                using var fallbackGet = new HttpRequestMessage(HttpMethod.Get, finalUrl);
+                using var fallbackGet = BuildRequest(HttpMethod.Get, new Uri(finalUrl), referrer, cookieHeader, userAgent);
                 using var getResponse = await _httpClient.SendAsync(
                     fallbackGet,
                     HttpCompletionOption.ResponseHeadersRead,
@@ -208,5 +213,28 @@ public sealed class HttpProbeService
             return FileCategoryClassifier.SanitizeFileName($"{uri.Host}_download{ext}", $"download{ext}");
         }
         return $"download{ext}";
+    }
+
+    internal static HttpRequestMessage BuildRequest(
+        HttpMethod method,
+        Uri uri,
+        string? referrer,
+        string? cookieHeader,
+        string? userAgent)
+    {
+        var req = new HttpRequestMessage(method, uri);
+        if (!string.IsNullOrWhiteSpace(referrer) && Uri.TryCreate(referrer, UriKind.Absolute, out var refUri))
+        {
+            req.Headers.Referrer = refUri;
+        }
+        if (!string.IsNullOrWhiteSpace(cookieHeader))
+        {
+            req.Headers.TryAddWithoutValidation("Cookie", cookieHeader);
+        }
+        if (!string.IsNullOrWhiteSpace(userAgent))
+        {
+            req.Headers.TryAddWithoutValidation("User-Agent", userAgent);
+        }
+        return req;
     }
 }

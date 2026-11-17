@@ -40,7 +40,12 @@ public sealed class HttpDownloadRunner
         task.SpeedBytesPerSec = 0;
         onProgress(task);
 
-        ProbeResult probe = await _probeService.ProbeAsync(task.Url, cancellationToken).ConfigureAwait(false);
+        ProbeResult probe = await _probeService.ProbeAsync(
+            task.Url,
+            cancellationToken,
+            task.Referrer,
+            task.CookieHeader,
+            task.UserAgentOverride).ConfigureAwait(false);
 
         bool canResumeExisting = isResumeAttempt
             && task.SupportsRanges
@@ -241,7 +246,12 @@ public sealed class HttpDownloadRunner
                 segment.Status = SegmentStatus.Active;
                 segment.LastError = null;
 
-                using var request = new HttpRequestMessage(HttpMethod.Get, effectiveUrl);
+                using var request = HttpProbeService.BuildRequest(
+                    HttpMethod.Get,
+                    new Uri(effectiveUrl),
+                    task.Referrer,
+                    task.CookieHeader,
+                    task.UserAgentOverride);
                 if (segment.EndOffset >= 0)
                 {
                     long rangeStart = segment.NextWriteOffset;

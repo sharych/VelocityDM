@@ -1,0 +1,72 @@
+<Window x:Class="VelocityDM.App.Views.AddTorrentWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Add Torrent or Magnet Link"
+        Icon="pack://application:,,,/Assets/VelocityDM.ico"
+        Width="580"
+        SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        Background="{StaticResource BgWindowBrush}">
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Margin="0,0,0,12">
+            <TextBlock Text="Magnet Link (magnet:?xt=urn:btih:...) or Local .torrent File"
+                       Foreground="{StaticResource TextSecondaryBrush}"
+                       FontSize="12"
+                       Margin="0,0,0,5" />
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBox x:Name="SourceTextBox" />
+                <Button Grid.Column="1"
+                        Content="Browse .torrent..."
+                        Margin="8,0,0,0"
+                        Style="{StaticResource ToolbarButtonStyle}"
+                        Click="BrowseTorrent_Click" />
+            </Grid>
+        </StackPanel>
+
+        <StackPanel Grid.Row="1" Margin="0,0,0,12">
+            <TextBlock Text="Save To Folder" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" Margin="0,0,0,5" />
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBox x:Name="SaveDirTextBox" />
+                <Button Grid.Column="1"
+                        Content="Browse..."
+                        Margin="8,0,0,0"
+                        Style="{StaticResource ToolbarButtonStyle}"
+                        Click="BrowseFolder_Click" />
+            </Grid>
+        </StackPanel>
+
+        <CheckBox x:Name="SequentialCheckBox"
+                  Grid.Row="2"
+                  Content="Sequential piece order (download beginning-to-end, ideal for video streaming)"
+                  Margin="0,0,0,16" />
+
+        <TextBlock Grid.Row="3"
+                   Text="Torrents use DHT, Peer Exchange, Local Peer Discovery, and automatic fast-resume state."
+                   Foreground="{StaticResource TextSecondaryBrush}"
+                   FontSize="11"
+                   Margin="0,0,0,16" />
+
+        <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Content="Cancel" Style="{StaticResource ToolbarButtonStyle}" MinWidth="90" Margin="0,0,10,0" IsCancel="True" />
+            <Button Content="Add Paused" Style="{StaticResource ToolbarButtonStyle}" MinWidth="110" Margin="0,0,10,0" Click="AddPaused_Click" />
+            <Button Content="Start Torrent" Style="{StaticResource PrimaryButtonStyle}" MinWidth="130" IsDefault="True" Click="StartTorrent_Click" />
+        </StackPanel>
+    </Grid>
+</Window>

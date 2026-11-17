@@ -60,6 +60,12 @@ public sealed class DownloadTask
 
     public DateTimeOffset? CompletedAt { get; set; }
 
+    public string? Referrer { get; set; }
+
+    public string? CookieHeader { get; set; }
+
+    public string? UserAgentOverride { get; set; }
+
     public int QueueOrder { get; set; }
 
     public List<SegmentState> Segments { get; set; } = new();
@@ -109,6 +115,9 @@ public sealed class DownloadTask
             HashVerified = HashVerified,
             CreatedAt = CreatedAt,
             CompletedAt = CompletedAt,
+            Referrer = Referrer,
+            CookieHeader = CookieHeader,
+            UserAgentOverride = UserAgentOverride,
             QueueOrder = QueueOrder,
             SpeedBytesPerSec = SpeedBytesPerSec,
             Segments = Segments.Select(s => s.Clone()).ToList()

@@ -394,4 +394,44 @@ public sealed class DownloadIntegrationTests
 
         Directory.Delete(tempRoot, recursive: true);
     }
+
+    [Fact]
+    public async Task BrowserForwardedCookiesAndReferer_AreSentDuringProbeAndDownload()
+    {
+        var tempRoot = Path.Combine(Path.GetTempPath(), "vdm_headers_" + Guid.NewGuid().ToString("N"));
+        var stateDir = Path.Combine(tempRoot, "state");
+        var downloadDir = Path.Combine(tempRoot, "downloads");
+
+        await using var server = new LocalHttpTestServer();
+        var payload = CreateDeterministicPayload(350_000, seed: 77);
+        var route = new LocalHttpTestServer.RouteConfig
+        {
+            Payload = payload,
+            SupportRanges = true
+        };
+        server.Map("/protected.zip", route);
+
+        var store = new JsonStateStore(stateDir);
+        await store.SaveSettingsAsync(new AppSettings
+        {
+            DefaultDownloadDirectory = downloadDir,
+            CategorizeIntoSubfolders = false,
+            DefaultConnectionsPerDownload = 2
+        });
+
+        await using var manager = new DownloadManagerService(store);
+        await manager.InitializeAsync();
+
+        var task = await manager.AddDownloadAsync(new AddDownloadOptions(
+            Url: $"{server.BaseUrl}/protected.zip",
+            Referrer: "https://example.org/files",
+            CookieHeader: "session=abc123; token=xyz"));
+
+        var done = await WaitForStatusAsync(manager, task.Id, t => t.Status == DownloadStatus.Completed);
+        Assert.Equal(payload, await File.ReadAllBytesAsync(done.TargetFilePath));
+        Assert.Equal("session=abc123; token=xyz", route.LastCookieHeader);
+        Assert.Equal("https://example.org/files", route.LastRefererHeader);
+
+        Directory.Delete(tempRoot, recursive: true);
+    }
 }

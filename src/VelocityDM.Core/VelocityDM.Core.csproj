@@ -7,4 +7,8 @@
     <RootNamespace>VelocityDM.Core</RootNamespace>
   </PropertyGroup>
 
+  <ItemGroup>
+    <PackageReference Include="MonoTorrent" Version="3.0.2" />
+  </ItemGroup>
+
 </Project>
