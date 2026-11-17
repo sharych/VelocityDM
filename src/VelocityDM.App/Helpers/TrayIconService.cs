@@ -27,7 +27,7 @@ public sealed class TrayIconService : IDisposable
         Drawing.Icon? icon = null;
         try
         {
-            var streamInfo = WpfApp.GetResourceStream(new Uri("pack://application:,,,/Assets/VelocityDM.ico"));
+            var streamInfo = WpfApp.GetResourceStream(new Uri("pack://application:,,,/VelocityDM;component/Assets/VelocityDM.ico"));
             if (streamInfo != null)
             {
                 using Stream s = streamInfo.Stream;

@@ -45,7 +45,29 @@ public partial class MainWindow : Window
             _clipboardMonitor.Attach(this);
         };
 
+        _viewModel.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(MainViewModel.ActiveFilter))
+            {
+                Dispatcher.BeginInvoke(SyncSidebarSelection);
+            }
+        };
+
         Closed += (_, _) => _clipboardMonitor.Dispose();
+    }
+
+    private void SyncSidebarSelection()
+    {
+        string targetTag = _viewModel.ActiveFilter.ToString();
+        foreach (var child in SidebarStack.Children)
+        {
+            if (child is RadioButton rb && rb.Tag is string tag &&
+                string.Equals(tag, targetTag, StringComparison.Ordinal))
+            {
+                if (rb.IsChecked != true) rb.IsChecked = true;
+                break;
+            }
+        }
     }
 
     protected override void OnClosing(CancelEventArgs e)

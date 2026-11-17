@@ -13,6 +13,8 @@ public partial class App : Application
     private SingleInstanceIpc? _ipc;
     private bool _startMinimized;
     private string? _initialAddUrl;
+    private string? _dataDirOverride;
+    private int? _portOverride;
 
     private DownloadManagerService? _downloadManager;
     private TorrentManagerService? _torrentManager;
@@ -26,11 +28,18 @@ public partial class App : Application
     {
     }
 
-    public void Configure(SingleInstanceIpc ipc, bool startMinimized = false, string? initialAddUrl = null)
+    public void Configure(
+        SingleInstanceIpc ipc,
+        bool startMinimized = false,
+        string? initialAddUrl = null,
+        string? dataDirOverride = null,
+        int? portOverride = null)
     {
         _ipc = ipc;
         _startMinimized = startMinimized;
         _initialAddUrl = initialAddUrl;
+        _dataDirOverride = dataDirOverride;
+        _portOverride = portOverride;
     }
 
     protected override async void OnStartup(StartupEventArgs e)
@@ -40,9 +49,9 @@ public partial class App : Application
 
         try
         {
-            var store = new JsonStateStore();
+            var store = new JsonStateStore(_dataDirOverride);
             _downloadManager = new DownloadManagerService(store);
-            _torrentManager = new TorrentManagerService(store);
+            _torrentManager = new TorrentManagerService(store, useEphemeralPorts: !string.IsNullOrWhiteSpace(_dataDirOverride));
             _mainViewModel = new MainViewModel(_downloadManager, _torrentManager);
             _mainWindow = new MainWindow(_mainViewModel);
             MainWindow = _mainWindow;
@@ -60,7 +69,7 @@ public partial class App : Application
 
             await _mainViewModel.InitializeAsync();
             var settings = _downloadManager.Settings;
-            _bridgeServer.Start(settings.BrowserBridgePort);
+            _bridgeServer.Start(_portOverride ?? settings.BrowserBridgePort);
             _trayIcon?.UpdateClipboardChecked(settings.ClipboardMonitoringEnabled);
 
             _downloadManager.SettingsUpdated += updated =>
@@ -156,6 +165,13 @@ public partial class App : Application
         }
 
         string url = cmd.Url.Trim();
+        if (File.Exists(url) && url.EndsWith(".torrent", StringComparison.OrdinalIgnoreCase))
+        {
+            _mainWindow.RestoreFromTray();
+            await _mainWindow.ShowAddTorrentDialogAsync(url);
+            return;
+        }
+
         if (url.StartsWith("magnet:?", StringComparison.OrdinalIgnoreCase))
         {
             bool autoStart = cmd.StartImmediately ?? _downloadManager.Settings.AutoStartBrowserDownloads;

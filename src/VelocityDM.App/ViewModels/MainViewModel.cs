@@ -33,7 +33,10 @@ public enum SidebarFilter
     TorrentsPaused
 }
 
-public sealed record SpeedLimitPreset(string Label, long BytesPerSecond);
+public sealed record SpeedLimitPreset(string Label, long BytesPerSecond)
+{
+    public override string ToString() => Label;
+}
 
 public sealed class MainViewModel : ObservableObject
 {

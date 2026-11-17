@@ -1,7 +1,8 @@
-# .NET build artifacts
+# .NET build & release artifacts
 bin/
 obj/
 publish/
+dist/
 TestResults/
 *.user
 *.suo

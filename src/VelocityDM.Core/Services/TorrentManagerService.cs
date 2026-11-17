@@ -441,7 +441,7 @@ public sealed class TorrentManagerService : IAsyncDisposable
             Name = string.IsNullOrWhiteSpace(manager.Name) ? record.Name : manager.Name,
             InfoHashHex = record.InfoHashHex,
             MagnetUri = record.MagnetUri,
-            SaveDirectory = manager.ContainingDirectory ?? record.SaveDirectory,
+            SaveDirectory = string.IsNullOrWhiteSpace(manager.ContainingDirectory) ? record.SaveDirectory : manager.ContainingDirectory,
             State = manager.State,
             IsPaused = record.IsPaused || manager.State is TorrentState.Paused or TorrentState.Stopped,
             Sequential = record.Sequential,

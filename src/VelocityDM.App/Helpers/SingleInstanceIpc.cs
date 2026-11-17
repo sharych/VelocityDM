@@ -1,5 +1,6 @@
 using System.IO;
 using System.IO.Pipes;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 
@@ -10,19 +11,28 @@ namespace VelocityDM.App.Helpers;
 /// </summary>
 public sealed class SingleInstanceIpc : IDisposable
 {
-    private static readonly string SafeUser = SanitizeIdentifier(Environment.UserName);
-    public static readonly string MutexName = $@"Local\VelocityDM_SingleInstance_v2_{SafeUser}";
-    public static readonly string PipeName = $"VelocityDM_IPC_v2_{SafeUser}";
-
+    private readonly string _mutexName;
+    private readonly string _pipeName;
     private Mutex? _mutex;
     private CancellationTokenSource? _cts;
     private Task? _listenTask;
+
+    public SingleInstanceIpc(string? profileScope = null)
+    {
+        string userScope = SanitizeIdentifier(Environment.UserName);
+        string scopeSuffix = string.IsNullOrWhiteSpace(profileScope)
+            ? userScope
+            : $"{userScope}_{ShortHash(profileScope)}";
+
+        _mutexName = $@"Local\VelocityDM_SingleInstance_v2_{scopeSuffix}";
+        _pipeName = $"VelocityDM_IPC_v2_{scopeSuffix}";
+    }
 
     public event Action<BridgeCommand>? CommandReceived;
 
     public bool TryAcquirePrimary()
     {
-        _mutex = new Mutex(initiallyOwned: true, MutexName, out bool createdNew);
+        _mutex = new Mutex(initiallyOwned: true, _mutexName, out bool createdNew);
         if (!createdNew)
         {
             _mutex.Dispose();
@@ -41,11 +51,20 @@ public sealed class SingleInstanceIpc : IDisposable
         _listenTask = Task.Run(() => ListenLoopAsync(_cts.Token));
     }
 
-    public static async Task<bool> TrySendCommandAsync(BridgeCommand command, int timeoutMs = 2000)
+    public Task<bool> TrySendCommandAsync(BridgeCommand command, int timeoutMs = 2000) =>
+        TrySendCommandToPipeAsync(_pipeName, command, timeoutMs);
+
+    public static async Task<bool> TrySendCommandToDefaultAsync(BridgeCommand command, int timeoutMs = 2000)
+    {
+        string defaultPipe = $"VelocityDM_IPC_v2_{SanitizeIdentifier(Environment.UserName)}";
+        return await TrySendCommandToPipeAsync(defaultPipe, command, timeoutMs).ConfigureAwait(false);
+    }
+
+    private static async Task<bool> TrySendCommandToPipeAsync(string pipeName, BridgeCommand command, int timeoutMs)
     {
         try
         {
-            using var client = new NamedPipeClientStream(".", PipeName, PipeDirection.Out, PipeOptions.Asynchronous);
+            using var client = new NamedPipeClientStream(".", pipeName, PipeDirection.Out, PipeOptions.Asynchronous);
             await client.ConnectAsync(timeoutMs).ConfigureAwait(false);
 
             string json = JsonSerializer.Serialize(command);
@@ -67,7 +86,7 @@ public sealed class SingleInstanceIpc : IDisposable
             try
             {
                 using var server = new NamedPipeServerStream(
-                    PipeName,
+                    _pipeName,
                     PipeDirection.In,
                     NamedPipeServerStream.MaxAllowedServerInstances,
                     PipeTransmissionMode.Byte,
@@ -100,6 +119,12 @@ public sealed class SingleInstanceIpc : IDisposable
     {
         var chars = value.Select(c => char.IsLetterOrDigit(c) ? c : '_').ToArray();
         return chars.Length == 0 ? "user" : new string(chars);
+    }
+
+    private static string ShortHash(string value)
+    {
+        byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes(value.ToLowerInvariant()));
+        return Convert.ToHexString(hash)[..10];
     }
 
     public void Dispose()

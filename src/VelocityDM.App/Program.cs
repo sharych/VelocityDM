@@ -11,6 +11,20 @@ public static class Program
     [STAThread]
     public static int Main(string[] args)
     {
+        if (args.Any(a => a.Equals("--register-browser", StringComparison.OrdinalIgnoreCase)))
+        {
+            try
+            {
+                BrowserRegistrationService.ExtractExtensionFiles();
+                BrowserRegistrationService.RegisterNativeMessagingHost();
+                return 0;
+            }
+            catch
+            {
+                return 1;
+            }
+        }
+
         bool isNativeHost = args.Any(a =>
             a.Equals("--native-host", StringComparison.OrdinalIgnoreCase) ||
             a.StartsWith("chrome-extension://", StringComparison.OrdinalIgnoreCase));
@@ -22,20 +36,27 @@ public static class Program
 
         bool startMinimized = args.Any(a => a.Equals("--minimized", StringComparison.OrdinalIgnoreCase));
         string? addUrlArg = ExtractArgValue(args, "--add-url");
+        string? dataDirArg = ExtractArgValue(args, "--data-dir");
+        int? portArg = int.TryParse(ExtractArgValue(args, "--port"), out int p) ? p : null;
 
-        using var ipc = new SingleInstanceIpc();
+        if (string.IsNullOrWhiteSpace(addUrlArg) && args.Length == 1 && !args[0].StartsWith("--"))
+        {
+            addUrlArg = args[0];
+        }
+
+        using var ipc = new SingleInstanceIpc(dataDirArg);
         if (!ipc.TryAcquirePrimary())
         {
             var cmd = !string.IsNullOrWhiteSpace(addUrlArg)
                 ? new BridgeCommand { Action = "download", Url = addUrlArg }
                 : new BridgeCommand { Action = "show" };
 
-            SingleInstanceIpc.TrySendCommandAsync(cmd, 2500).GetAwaiter().GetResult();
+            ipc.TrySendCommandAsync(cmd, 2500).GetAwaiter().GetResult();
             return 0;
         }
 
         var app = new App();
-        app.Configure(ipc, startMinimized, addUrlArg);
+        app.Configure(ipc, startMinimized, addUrlArg, dataDirArg, portArg);
         app.InitializeComponent();
         return app.Run();
     }
@@ -73,7 +94,7 @@ public static class Program
                 return 0;
             }
 
-            bool sent = await SingleInstanceIpc.TrySendCommandAsync(command, 800).ConfigureAwait(false);
+            bool sent = await SingleInstanceIpc.TrySendCommandToDefaultAsync(command, 800).ConfigureAwait(false);
             if (!sent)
             {
                 string? exePath = Environment.ProcessPath;
@@ -89,7 +110,7 @@ public static class Program
                     for (int attempt = 0; attempt < 25; attempt++)
                     {
                         await Task.Delay(200).ConfigureAwait(false);
-                        sent = await SingleInstanceIpc.TrySendCommandAsync(command, 600).ConfigureAwait(false);
+                        sent = await SingleInstanceIpc.TrySendCommandToDefaultAsync(command, 600).ConfigureAwait(false);
                         if (sent) break;
                     }
                 }
