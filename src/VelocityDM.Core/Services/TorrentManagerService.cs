@@ -1,6 +1,7 @@
 using System.Net;
 using MonoTorrent;
 using MonoTorrent.Client;
+using MonoTorrent.Connections;
 using MonoTorrent.PiecePicking;
 using VelocityDM.Core.Models;
 
@@ -11,6 +12,15 @@ namespace VelocityDM.Core.Services;
 /// </summary>
 public sealed class TorrentManagerService : IAsyncDisposable
 {
+    private static readonly string[] FallbackPublicTrackers =
+    [
+        "udp://tracker.opentrackr.org:1337/announce",
+        "udp://open.demonii.com:1337/announce",
+        "udp://open.stealth.si:80/announce",
+        "udp://tracker.torrent.eu.org:451/announce",
+        "udp://tracker.dler.org:6969/announce"
+    ];
+
     private readonly JsonStateStore _store;
     private readonly bool _useEphemeralPorts;
     private readonly object _sync = new();
@@ -72,6 +82,12 @@ public sealed class TorrentManagerService : IAsyncDisposable
         }
     }
 
+    public int GetTrackerTierCount(Guid id)
+    {
+        var entry = FindEntry(id);
+        return entry.Manager?.TrackerManager.Tiers.Count ?? 0;
+    }
+
     public async Task<TorrentStatusSnapshot> AddMagnetAsync(
         string magnetUri,
         string? customSaveDirectory = null,
@@ -98,9 +114,8 @@ public sealed class TorrentManagerService : IAsyncDisposable
             CreateContainingDirectory = true
         }.ToSettings();
 
-        TorrentManager manager = sequential
-            ? await _engine.AddStreamingAsync(magnet, saveDir, torrentSettings).ConfigureAwait(false)
-            : await _engine.AddAsync(magnet, saveDir, torrentSettings).ConfigureAwait(false);
+        TorrentManager manager = await AddMagnetWithParallelTrackersAsync(magnet, saveDir, torrentSettings, sequential)
+            .ConfigureAwait(false);
 
         var record = new TorrentRecord
         {
@@ -163,6 +178,11 @@ public sealed class TorrentManagerService : IAsyncDisposable
         TorrentManager manager = sequential
             ? await _engine.AddStreamingAsync(torrent, saveDir, torrentSettings).ConfigureAwait(false)
             : await _engine.AddAsync(torrent, saveDir, torrentSettings).ConfigureAwait(false);
+
+        if (!torrent.IsPrivate)
+        {
+            await SplitSingleTierTrackersAsync(manager).ConfigureAwait(false);
+        }
 
         var record = new TorrentRecord
         {
@@ -324,15 +344,18 @@ public sealed class TorrentManagerService : IAsyncDisposable
                     manager = record.Sequential
                         ? await _engine.AddStreamingAsync(torrent, record.SaveDirectory, settings).ConfigureAwait(false)
                         : await _engine.AddAsync(torrent, record.SaveDirectory, settings).ConfigureAwait(false);
+                    if (!torrent.IsPrivate)
+                    {
+                        await SplitSingleTierTrackersAsync(manager).ConfigureAwait(false);
+                    }
                 }
             }
             else if (!string.IsNullOrWhiteSpace(record.MagnetUri) && MagnetLink.TryParse(record.MagnetUri, out var magnet))
             {
                 if (!_engine.Contains(magnet.InfoHashes))
                 {
-                    manager = record.Sequential
-                        ? await _engine.AddStreamingAsync(magnet, record.SaveDirectory, settings).ConfigureAwait(false)
-                        : await _engine.AddAsync(magnet, record.SaveDirectory, settings).ConfigureAwait(false);
+                    manager = await AddMagnetWithParallelTrackersAsync(magnet, record.SaveDirectory, settings, record.Sequential)
+                        .ConfigureAwait(false);
                 }
             }
 
@@ -480,9 +503,18 @@ public sealed class TorrentManagerService : IAsyncDisposable
             AllowLocalPeerDiscovery = !_useEphemeralPorts,
             AllowPortForwarding = !_useEphemeralPorts,
             MaximumConnections = settings.TorrentMaxConnections,
+            MaximumHalfOpenConnections = 32,
+            ConnectionTimeout = TimeSpan.FromSeconds(5),
+            StaleRequestTimeout = TimeSpan.FromSeconds(15),
             MaximumDownloadRate = (int)Math.Clamp(settings.TorrentDownloadSpeedLimitBytesPerSec, 0, int.MaxValue),
             MaximumUploadRate = (int)Math.Clamp(settings.TorrentUploadSpeedLimitBytesPerSec, 0, int.MaxValue)
         };
+
+        // Prefer PlainText first so peers (e.g. qBittorrent/Transmission) that reject RC4Header connect immediately.
+        builder.AllowedEncryption.Clear();
+        builder.AllowedEncryption.Add(EncryptionType.PlainText);
+        builder.AllowedEncryption.Add(EncryptionType.RC4Header);
+        builder.AllowedEncryption.Add(EncryptionType.RC4Full);
 
         if (_useEphemeralPorts)
         {
@@ -491,6 +523,101 @@ public sealed class TorrentManagerService : IAsyncDisposable
         }
 
         return builder.ToSettings();
+    }
+
+    private async Task<TorrentManager> AddMagnetWithParallelTrackersAsync(
+        MagnetLink magnet,
+        string saveDirectory,
+        TorrentSettings torrentSettings,
+        bool sequential)
+    {
+        var trackerUrls = CollectUniqueTrackerUrls(magnet.AnnounceUrls);
+        if (trackerUrls.Count < 3)
+        {
+            foreach (var fallback in FallbackPublicTrackers)
+            {
+                if (!trackerUrls.Contains(fallback, StringComparer.OrdinalIgnoreCase))
+                {
+                    trackerUrls.Add(fallback);
+                }
+            }
+        }
+
+        // Add magnet without single-tier trackers, then attach each tracker individually so MonoTorrent announces them in parallel.
+        var cleanMagnet = new MagnetLink(
+            magnet.InfoHashes,
+            magnet.Name,
+            Array.Empty<string>(),
+            magnet.Webseeds,
+            magnet.Size);
+
+        TorrentManager manager = sequential
+            ? await _engine!.AddStreamingAsync(cleanMagnet, saveDirectory, torrentSettings).ConfigureAwait(false)
+            : await _engine!.AddAsync(cleanMagnet, saveDirectory, torrentSettings).ConfigureAwait(false);
+
+        foreach (var trackerUrl in trackerUrls)
+        {
+            if (Uri.TryCreate(trackerUrl, UriKind.Absolute, out var uri))
+            {
+                try
+                {
+                    await manager.TrackerManager.AddTrackerAsync(uri).ConfigureAwait(false);
+                }
+                catch
+                {
+                    // Skip unsupported/malformed tracker scheme safely
+                }
+            }
+        }
+
+        return manager;
+    }
+
+    private static async Task SplitSingleTierTrackersAsync(TorrentManager manager)
+    {
+        if (manager.TrackerManager.Tiers.Count != 1 || manager.TrackerManager.Tiers[0].Trackers.Count <= 1)
+            return;
+
+        var existing = manager.TrackerManager.Tiers[0].Trackers.ToList();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // Keep the first tracker in Tier 0 and move remaining trackers into their own tiers for parallel announces.
+        if (existing[0].Uri != null)
+        {
+            seen.Add(existing[0].Uri.AbsoluteUri);
+        }
+
+        for (int i = 1; i < existing.Count; i++)
+        {
+            var tracker = existing[i];
+            try
+            {
+                await manager.TrackerManager.RemoveTrackerAsync(tracker).ConfigureAwait(false);
+                if (tracker.Uri != null && seen.Add(tracker.Uri.AbsoluteUri))
+                {
+                    await manager.TrackerManager.AddTrackerAsync(tracker.Uri).ConfigureAwait(false);
+                }
+            }
+            catch
+            {
+                // Ignore individual tracker move failures
+            }
+        }
+    }
+
+    private static List<string> CollectUniqueTrackerUrls(IEnumerable<string> urls)
+    {
+        var list = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var raw in urls)
+        {
+            var trimmed = raw?.Trim();
+            if (!string.IsNullOrEmpty(trimmed) && seen.Add(trimmed))
+            {
+                list.Add(trimmed);
+            }
+        }
+        return list;
     }
 
     private string ResolveSaveDir(string? customDir)

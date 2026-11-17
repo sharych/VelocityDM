@@ -56,4 +56,34 @@ public sealed class TorrentTests
 
         Directory.Delete(tempRoot, recursive: true);
     }
+
+    [Fact]
+    public async Task TorrentManagerService_SplitsMagnetTrackersIntoParallelTiersAndAddsFallbacksWhenEmpty()
+    {
+        var tempRoot = Path.Combine(Path.GetTempPath(), "vdm_tiers_" + Guid.NewGuid().ToString("N"));
+        var stateDir = Path.Combine(tempRoot, "state");
+        var settings = new AppSettings { DefaultDownloadDirectory = Path.Combine(tempRoot, "downloads") };
+
+        await using var svc = new TorrentManagerService(new JsonStateStore(stateDir), useEphemeralPorts: true);
+        await svc.InitializeAsync(settings);
+
+        string multiTrackerMagnet =
+            "magnet:?xt=urn:btih:1111111111111111111111111111111111111111&dn=Multi" +
+            "&tr=udp%3A%2F%2Ftracker.example1.org%3A1337%2Fannounce" +
+            "&tr=udp%3A%2F%2Ftracker.example2.org%3A6969%2Fannounce" +
+            "&tr=udp%3A%2F%2Ftracker.example1.org%3A1337%2Fannounce" +
+            "&tr=https%3A%2F%2Ftracker.example3.org%2Fannounce" +
+            "&tr=http%3A%2F%2Ftracker.example4.org%3A80%2Fannounce";
+
+        var t1 = await svc.AddMagnetAsync(multiTrackerMagnet, startImmediately: false);
+        Assert.Equal(4, svc.GetTrackerTierCount(t1.Id));
+
+        string trackerlessMagnet = "magnet:?xt=urn:btih:2222222222222222222222222222222222222222&dn=Trackerless";
+        var t2 = await svc.AddMagnetAsync(trackerlessMagnet, startImmediately: false);
+        Assert.True(svc.GetTrackerTierCount(t2.Id) >= 5);
+
+        await svc.RemoveAsync(t1.Id, false);
+        await svc.RemoveAsync(t2.Id, false);
+        Directory.Delete(tempRoot, recursive: true);
+    }
 }
