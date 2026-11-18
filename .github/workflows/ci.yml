@@ -27,3 +27,6 @@ jobs:
 
       - name: Run Unit & Integration Tests
         run: dotnet test VelocityDM.sln -c Release --no-build --verbosity normal
+
+      - name: Run Chrome Extension Tests
+        run: node --test tests/extension/background.test.mjs
