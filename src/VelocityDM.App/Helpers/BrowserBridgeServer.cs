@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
+using VelocityDM.Core.Services;
 
 namespace VelocityDM.App.Helpers;
 
@@ -141,15 +142,34 @@ public sealed class BrowserBridgeServer : IAsyncDisposable
                     bodyJson = Encoding.UTF8.GetString(bodyBytes, 0, totalRead);
                 }
 
-                var cmd = JsonSerializer.Deserialize<BridgeCommand>(bodyJson);
-                if (cmd != null)
+                BridgeCommand? cmd = null;
+                if (!string.IsNullOrWhiteSpace(bodyJson))
                 {
-                    CommandReceived?.Invoke(cmd);
-                    await WriteJsonResponseAsync(stream, "200 OK", "{\"ok\":true}", ct).ConfigureAwait(false);
+                    try
+                    {
+                        cmd = JsonSerializer.Deserialize<BridgeCommand>(bodyJson);
+                    }
+                    catch (JsonException)
+                    {
+                        cmd = null;
+                    }
+                }
+
+                if (cmd == null)
+                {
+                    await WriteJsonResponseAsync(stream, "400 Bad Request", "{\"ok\":false,\"error\":\"Invalid payload\"}", ct).ConfigureAwait(false);
                     return;
                 }
 
-                await WriteJsonResponseAsync(stream, "400 Bad Request", "{\"ok\":false,\"error\":\"Invalid payload\"}", ct).ConfigureAwait(false);
+                if (string.Equals(cmd.Action, "download", StringComparison.OrdinalIgnoreCase) &&
+                    !ExternalDownloadBurstGuard.TryNormalizeSupportedUrl(cmd.Url, out _))
+                {
+                    await WriteJsonResponseAsync(stream, "400 Bad Request", "{\"ok\":false,\"error\":\"Invalid or missing URL\"}", ct).ConfigureAwait(false);
+                    return;
+                }
+
+                CommandReceived?.Invoke(cmd);
+                await WriteJsonResponseAsync(stream, "200 OK", "{\"ok\":true}", ct).ConfigureAwait(false);
                 return;
             }
 

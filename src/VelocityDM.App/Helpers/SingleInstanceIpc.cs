@@ -115,7 +115,7 @@ public sealed class SingleInstanceIpc : IDisposable
         }
     }
 
-    private static string SanitizeIdentifier(string value)
+    internal static string SanitizeIdentifier(string value)
     {
         var chars = value.Select(c => char.IsLetterOrDigit(c) ? c : '_').ToArray();
         return chars.Length == 0 ? "user" : new string(chars);

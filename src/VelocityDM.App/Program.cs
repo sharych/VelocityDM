@@ -3,6 +3,7 @@ using System.IO;
 using System.Text;
 using System.Text.Json;
 using VelocityDM.App.Helpers;
+using VelocityDM.Core.Services;
 
 namespace VelocityDM.App;
 
@@ -94,27 +95,14 @@ public static class Program
                 return 0;
             }
 
-            bool sent = await SingleInstanceIpc.TrySendCommandToDefaultAsync(command, 800).ConfigureAwait(false);
-            if (!sent)
+            if (string.Equals(command.Action, "download", StringComparison.OrdinalIgnoreCase) &&
+                !ExternalDownloadBurstGuard.TryNormalizeSupportedUrl(command.Url, out _))
             {
-                string? exePath = Environment.ProcessPath;
-                if (!string.IsNullOrWhiteSpace(exePath) && File.Exists(exePath))
-                {
-                    Process.Start(new ProcessStartInfo
-                    {
-                        FileName = exePath,
-                        Arguments = "--minimized",
-                        UseShellExecute = false
-                    });
-
-                    for (int attempt = 0; attempt < 25; attempt++)
-                    {
-                        await Task.Delay(200).ConfigureAwait(false);
-                        sent = await SingleInstanceIpc.TrySendCommandToDefaultAsync(command, 600).ConfigureAwait(false);
-                        if (sent) break;
-                    }
-                }
+                await WriteNativeResponseAsync(stdout, new { ok = false, error = "Invalid or missing URL" }).ConfigureAwait(false);
+                return 0;
             }
+
+            bool sent = await Task.Run(() => EnsurePrimaryAndSendCommand(command)).ConfigureAwait(false);
 
             await WriteNativeResponseAsync(stdout, new { ok = sent }).ConfigureAwait(false);
             return 0;
@@ -131,6 +119,61 @@ public static class Program
                 // Ignore
             }
             return 1;
+        }
+    }
+
+    private static bool EnsurePrimaryAndSendCommand(BridgeCommand command)
+    {
+        if (SingleInstanceIpc.TrySendCommandToDefaultAsync(command, 800).GetAwaiter().GetResult())
+            return true;
+
+        string userScope = SingleInstanceIpc.SanitizeIdentifier(Environment.UserName);
+        using var launchMutex = new Mutex(initiallyOwned: false, $@"Local\VelocityDM_NativeHost_Launch_{userScope}");
+        bool acquired = false;
+
+        try
+        {
+            try
+            {
+                acquired = launchMutex.WaitOne(TimeSpan.FromSeconds(8));
+            }
+            catch (AbandonedMutexException)
+            {
+                acquired = true;
+            }
+
+            if (SingleInstanceIpc.TrySendCommandToDefaultAsync(command, 600).GetAwaiter().GetResult())
+                return true;
+
+            if (!acquired)
+                return false;
+
+            string? exePath = Environment.ProcessPath;
+            if (string.IsNullOrWhiteSpace(exePath) || !File.Exists(exePath))
+                return false;
+
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = exePath,
+                Arguments = "--minimized",
+                UseShellExecute = false
+            });
+
+            for (int attempt = 0; attempt < 25; attempt++)
+            {
+                Thread.Sleep(200);
+                if (SingleInstanceIpc.TrySendCommandToDefaultAsync(command, 600).GetAwaiter().GetResult())
+                    return true;
+            }
+
+            return false;
+        }
+        finally
+        {
+            if (acquired)
+            {
+                try { launchMutex.ReleaseMutex(); } catch { }
+            }
         }
     }
 

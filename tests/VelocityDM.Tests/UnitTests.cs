@@ -121,4 +121,34 @@ public sealed class UnitTests
         Assert.Equal(SegmentStatus.Completed, tasks[0].Segments[1].Status);
         Assert.Equal(DownloadStatus.Completed, tasks[1].Status);
     }
+
+    [Fact]
+    public void ExternalDownloadBurstGuard_DeduplicatesUrlsAndCapsPendingPopups()
+    {
+        var currentTime = new DateTimeOffset(2026, 11, 18, 12, 0, 0, TimeSpan.Zero);
+        var guard = new ExternalDownloadBurstGuard(
+            maxPendingPopups: 3,
+            duplicateCooldown: TimeSpan.FromSeconds(3),
+            utcNow: () => currentTime);
+
+        Assert.False(guard.TryAcceptUrl("", out _));
+        Assert.False(guard.TryAcceptUrl("ftp://example.com/file.zip", out _));
+
+        Assert.True(guard.TryAcceptUrl("https://example.com/file.zip", out var normalized));
+        Assert.Equal("https://example.com/file.zip", normalized);
+        Assert.False(guard.TryAcceptUrl("HTTPS://example.com/file.zip", out _));
+
+        currentTime = currentTime.AddSeconds(4);
+        Assert.True(guard.TryAcceptUrl("https://example.com/file.zip", out _));
+
+        Assert.True(guard.TryAcquirePopupSlot());
+        Assert.True(guard.TryAcquirePopupSlot());
+        Assert.True(guard.TryAcquirePopupSlot());
+        Assert.False(guard.TryAcquirePopupSlot());
+        Assert.Equal(3, guard.PendingPopupCount);
+
+        guard.ReleasePopupSlot();
+        Assert.Equal(2, guard.PendingPopupCount);
+        Assert.True(guard.TryAcquirePopupSlot());
+    }
 }

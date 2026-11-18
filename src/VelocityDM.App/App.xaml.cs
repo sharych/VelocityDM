@@ -24,6 +24,11 @@ public partial class App : Application
     private BrowserBridgeServer? _bridgeServer;
     private DispatcherTimer? _trayTooltipTimer;
 
+    private readonly ExternalDownloadBurstGuard _externalBurstGuard = new();
+    private readonly SemaphoreSlim _externalPopupGate = new(1, 1);
+    private readonly CancellationTokenSource _exitCts = new();
+    private bool _isExiting;
+
     public App()
     {
     }
@@ -60,12 +65,12 @@ public partial class App : Application
 
             if (_ipc != null)
             {
-                _ipc.CommandReceived += cmd => Dispatcher.BeginInvoke(() => _ = HandleExternalCommandAsync(cmd));
+                _ipc.CommandReceived += DispatchExternalCommand;
                 _ipc.StartListening();
             }
 
             _bridgeServer = new BrowserBridgeServer();
-            _bridgeServer.CommandReceived += cmd => Dispatcher.BeginInvoke(() => _ = HandleExternalCommandAsync(cmd));
+            _bridgeServer.CommandReceived += DispatchExternalCommand;
 
             await _mainViewModel.InitializeAsync();
             var settings = _downloadManager.Settings;
@@ -140,9 +145,24 @@ public partial class App : Application
         _trayIcon.ExitRequested += () => Dispatcher.BeginInvoke(ExplicitExit);
     }
 
+    private void DispatchExternalCommand(BridgeCommand cmd)
+    {
+        Dispatcher.BeginInvoke(async () =>
+        {
+            try
+            {
+                await HandleExternalCommandAsync(cmd);
+            }
+            catch (Exception ex)
+            {
+                LogFatalError("External command error", ex);
+            }
+        });
+    }
+
     private async Task HandleExternalCommandAsync(BridgeCommand cmd)
     {
-        if (_mainWindow == null || _downloadManager == null || _torrentManager == null)
+        if (_isExiting || _mainWindow == null || _downloadManager == null || _torrentManager == null)
             return;
 
         string action = (cmd.Action ?? "show").ToLowerInvariant();
@@ -158,57 +178,76 @@ public partial class App : Application
             return;
         }
 
-        if (string.IsNullOrWhiteSpace(cmd.Url))
+        if (!_externalBurstGuard.TryAcceptUrl(cmd.Url, out string url))
         {
-            _mainWindow.RestoreFromTray();
             return;
         }
 
-        string url = cmd.Url.Trim();
-        if (File.Exists(url) && url.EndsWith(".torrent", StringComparison.OrdinalIgnoreCase))
-        {
-            _mainWindow.RestoreFromTray();
-            await _mainWindow.ShowAddTorrentDialogAsync(url);
-            return;
-        }
+        bool isTorrentFile = File.Exists(url) && url.EndsWith(".torrent", StringComparison.OrdinalIgnoreCase);
+        bool isMagnet = url.StartsWith("magnet:?", StringComparison.OrdinalIgnoreCase);
+        bool startNow = !isTorrentFile && (cmd.StartImmediately ?? _downloadManager.Settings.AutoStartBrowserDownloads);
 
-        if (url.StartsWith("magnet:?", StringComparison.OrdinalIgnoreCase))
+        if (startNow)
         {
-            bool autoStart = cmd.StartImmediately ?? _downloadManager.Settings.AutoStartBrowserDownloads;
-            if (autoStart)
+            if (isMagnet)
             {
                 await _torrentManager.AddMagnetAsync(url);
                 _trayIcon?.ShowBalloon("VelocityDM", "Torrent added from browser.");
             }
             else
             {
-                _mainWindow.RestoreFromTray();
-                await _mainWindow.ShowAddTorrentDialogAsync(url);
+                var created = await _downloadManager.AddDownloadAsync(new AddDownloadOptions(
+                    Url: url,
+                    CustomFileName: string.IsNullOrWhiteSpace(cmd.Filename) ? null : cmd.Filename,
+                    StartImmediately: true,
+                    Referrer: cmd.Referrer,
+                    CookieHeader: cmd.Cookies,
+                    UserAgentOverride: cmd.UserAgent));
+                _trayIcon?.ShowBalloon("VelocityDM", $"Started downloading {created.FileName}");
             }
             return;
         }
 
-        bool startNow = cmd.StartImmediately ?? _downloadManager.Settings.AutoStartBrowserDownloads;
-        if (startNow)
+        if (!_externalBurstGuard.TryAcquirePopupSlot())
         {
-            var created = await _downloadManager.AddDownloadAsync(new AddDownloadOptions(
-                Url: url,
-                CustomFileName: string.IsNullOrWhiteSpace(cmd.Filename) ? null : cmd.Filename,
-                StartImmediately: true,
-                Referrer: cmd.Referrer,
-                CookieHeader: cmd.Cookies,
-                UserAgentOverride: cmd.UserAgent));
-            _trayIcon?.ShowBalloon("VelocityDM", $"Started downloading {created.FileName}");
+            _trayIcon?.ShowBalloon("VelocityDM", "Ignored excess external download popups.");
+            return;
         }
-        else
+
+        bool gateAcquired = false;
+        try
         {
+            await _externalPopupGate.WaitAsync(_exitCts.Token);
+            gateAcquired = true;
+
+            if (_isExiting)
+                return;
+
             _mainWindow.RestoreFromTray();
+            if (isTorrentFile || isMagnet)
+            {
+                await _mainWindow.ShowAddTorrentDialogAsync(url);
+                return;
+            }
+
             await _mainWindow.ShowAddUrlDialogAsync(
                 prefillUrl: url,
                 customFileName: string.IsNullOrWhiteSpace(cmd.Filename) ? null : cmd.Filename,
                 referrer: cmd.Referrer,
                 cookies: cmd.Cookies,
                 userAgent: cmd.UserAgent);
+        }
+        catch (OperationCanceledException)
+        {
+            // App is shutting down
+        }
+        finally
+        {
+            if (gateAcquired)
+            {
+                _externalPopupGate.Release();
+            }
+            _externalBurstGuard.ReleasePopupSlot();
         }
     }
 
@@ -226,6 +265,8 @@ public partial class App : Application
 
     private void ExplicitExit()
     {
+        _isExiting = true;
+        _exitCts.Cancel();
         _trayTooltipTimer?.Stop();
         if (_mainWindow != null)
         {
@@ -237,6 +278,8 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        _isExiting = true;
+        _exitCts.Cancel();
         _trayTooltipTimer?.Stop();
         _trayIcon?.Dispose();
         _bridgeServer?.Stop();
