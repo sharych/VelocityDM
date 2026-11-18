@@ -1,0 +1,85 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="VelocityDM.Mac.Views.SettingsWindow"
+        Title="VelocityDM Settings"
+        Icon="avares://VelocityDM/Assets/VelocityDM.png"
+        Width="620"
+        Height="610"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False"
+        Background="{StaticResource BgWindowBrush}">
+    <Grid Margin="20" RowDefinitions="*,Auto">
+        <ScrollViewer Grid.Row="0" Padding="0,0,8,0">
+            <StackPanel Spacing="10">
+                <TextBlock Text="HTTP DOWNLOADS &amp; STORAGE" Foreground="{StaticResource AccentCyanBrush}" FontWeight="Bold" FontSize="11" />
+
+                <StackPanel>
+                    <TextBlock Text="Default Download Folder" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" Margin="0,0,0,5" />
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBox x:Name="DefaultFolderTextBox" />
+                        <Button Grid.Column="1" Content="Browse..." Margin="8,0,0,0" Classes="toolbar" Click="Browse_Click" />
+                    </Grid>
+                </StackPanel>
+
+                <CheckBox x:Name="CategorizeCheckBox"
+                          Content="Organize downloads into category subfolders (Programs, Compressed, Video, Music, Docs, Images)" />
+
+                <Grid ColumnDefinitions="*,16,*">
+                    <StackPanel Grid.Column="0">
+                        <Grid Margin="0,0,0,4">
+                            <TextBlock Text="Default Segments / File" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" />
+                            <TextBlock x:Name="ConnectionsLabel" HorizontalAlignment="Right" Foreground="{StaticResource AccentCyanBrush}" FontWeight="SemiBold" FontSize="12" />
+                        </Grid>
+                        <Slider x:Name="ConnectionsSlider" Minimum="1" Maximum="32" TickFrequency="1" IsSnapToTickEnabled="True" ValueChanged="ConnectionsSlider_ValueChanged" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="2">
+                        <Grid Margin="0,0,0,4">
+                            <TextBlock Text="Max Concurrent Downloads" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" />
+                            <TextBlock x:Name="ConcurrentLabel" HorizontalAlignment="Right" Foreground="{StaticResource AccentCyanBrush}" FontWeight="SemiBold" FontSize="12" />
+                        </Grid>
+                        <Slider x:Name="ConcurrentSlider" Minimum="1" Maximum="16" TickFrequency="1" IsSnapToTickEnabled="True" ValueChanged="ConcurrentSlider_ValueChanged" />
+                    </StackPanel>
+                </Grid>
+
+                <Grid ColumnDefinitions="*,16,*">
+                    <StackPanel Grid.Column="0">
+                        <TextBlock Text="HTTP Speed Limit (KB/s, 0 = Unlimited)" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" Margin="0,0,0,5" />
+                        <TextBox x:Name="SpeedLimitKbTextBox" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="2">
+                        <TextBlock Text="Max Retries per Segment" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" Margin="0,0,0,5" />
+                        <TextBox x:Name="MaxRetriesTextBox" />
+                    </StackPanel>
+                </Grid>
+
+                <TextBlock Text="BACKGROUND &amp; MENU BAR TRAY" Foreground="{StaticResource AccentCyanBrush}" FontWeight="Bold" FontSize="11" Margin="0,6,0,0" />
+                <CheckBox x:Name="MinimizeToTrayCheckBox" Content="Keep running in Menu Bar when closing window (background downloads &amp; Chrome bridge)" />
+                <CheckBox x:Name="StartMinimizedCheckBox" Content="Start hidden in Menu Bar when launched with --minimized" />
+                <CheckBox x:Name="LaunchAtStartupCheckBox" Content="Start VelocityDM automatically when macOS logs in (LaunchAgent)" />
+                <CheckBox x:Name="AutoStartQueueCheckBox" Content="Automatically resume queued downloads on startup" />
+
+                <TextBlock Text="CHROME EXTENSION BRIDGE" Foreground="{StaticResource AccentCyanBrush}" FontWeight="Bold" FontSize="11" Margin="0,6,0,0" />
+                <CheckBox x:Name="AutoStartBrowserCheckBox" Content="Chrome Extension: auto-start intercepted downloads without showing popup" />
+
+                <Grid ColumnDefinitions="*,Auto">
+                    <StackPanel Grid.Column="0">
+                        <TextBlock Text="Local Browser Bridge Port (default 17890)" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" Margin="0,0,0,4" />
+                        <TextBox x:Name="BridgePortTextBox" Width="160" HorizontalAlignment="Left" />
+                    </StackPanel>
+                    <Button Grid.Column="1"
+                            Content="Setup Chrome Extension..."
+                            VerticalAlignment="Bottom"
+                            Classes="toolbar"
+                            Click="ChromeSetup_Click" />
+                </Grid>
+
+                <TextBlock x:Name="ValidationErrorText" Foreground="{StaticResource DangerBrush}" FontSize="12" TextWrapping="Wrap" />
+            </StackPanel>
+        </ScrollViewer>
+
+        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0" Spacing="10">
+            <Button Content="Cancel" Classes="toolbar" MinWidth="90" IsCancel="True" Click="Cancel_Click" />
+            <Button Content="Save Settings" Classes="primary" MinWidth="130" IsDefault="True" Click="Save_Click" />
+        </StackPanel>
+    </Grid>
+</Window>

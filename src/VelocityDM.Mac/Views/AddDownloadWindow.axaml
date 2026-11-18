@@ -1,0 +1,90 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="VelocityDM.Mac.Views.AddDownloadWindow"
+        Title="Add New Download"
+        Icon="avares://VelocityDM/Assets/VelocityDM.png"
+        Width="600"
+        SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False"
+        Background="{StaticResource BgWindowBrush}">
+    <Grid Margin="20" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+        <TextBlock Text="Download Link (HTTP / HTTPS)" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" Margin="0,0,0,5" />
+
+        <Grid Grid.Row="1" ColumnDefinitions="*,Auto" Margin="0,0,0,10">
+            <TextBox x:Name="UrlTextBox" TextChanged="UrlTextBox_TextChanged" />
+            <Button x:Name="ProbeButton"
+                    Grid.Column="1"
+                    Content="Probe Link"
+                    Margin="8,0,0,0"
+                    Classes="toolbar"
+                    Click="ProbeButton_Click" />
+        </Grid>
+
+        <Border Grid.Row="2"
+                Background="{StaticResource BgCardBrush}"
+                BorderBrush="{StaticResource BorderBrushSubtle}"
+                BorderThickness="1"
+                CornerRadius="6"
+                Padding="12,8"
+                Margin="0,0,0,14">
+            <TextBlock x:Name="ProbeInfoTextBlock"
+                       Text="Paste a direct download URL and click Probe Link to inspect size and multi-segment support."
+                       Foreground="{StaticResource AccentCyanBrush}"
+                       TextWrapping="Wrap"
+                       FontSize="12" />
+        </Border>
+
+        <Grid Grid.Row="3" ColumnDefinitions="2*,12,*" Margin="0,0,0,12">
+            <StackPanel Grid.Column="0">
+                <TextBlock Text="File Name" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" Margin="0,0,0,5" />
+                <TextBox x:Name="FileNameTextBox" />
+            </StackPanel>
+            <StackPanel Grid.Column="2">
+                <TextBlock Text="Category" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" Margin="0,0,0,5" />
+                <ComboBox x:Name="CategoryComboBox" HorizontalAlignment="Stretch" SelectionChanged="CategoryComboBox_SelectionChanged" />
+            </StackPanel>
+        </Grid>
+
+        <StackPanel Grid.Row="4" Margin="0,0,0,12">
+            <TextBlock Text="Save To Folder" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" Margin="0,0,0,5" />
+            <Grid ColumnDefinitions="*,Auto">
+                <TextBox x:Name="SaveDirTextBox" />
+                <Button Grid.Column="1"
+                        Content="Browse..."
+                        Margin="8,0,0,0"
+                        Classes="toolbar"
+                        Click="BrowseFolder_Click" />
+            </Grid>
+        </StackPanel>
+
+        <StackPanel Grid.Row="5" Margin="0,0,0,12">
+            <Grid Margin="0,0,0,4">
+                <TextBlock Text="Parallel Segment Connections" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" />
+                <TextBlock x:Name="ConnectionsValueText"
+                           Text="8 parallel connections"
+                           HorizontalAlignment="Right"
+                           Foreground="{StaticResource AccentCyanBrush}"
+                           FontWeight="SemiBold"
+                           FontSize="12" />
+            </Grid>
+            <Slider x:Name="ConnectionsSlider"
+                    Minimum="1"
+                    Maximum="32"
+                    TickFrequency="1"
+                    IsSnapToTickEnabled="True"
+                    ValueChanged="ConnectionsSlider_ValueChanged" />
+        </StackPanel>
+
+        <StackPanel Grid.Row="6" Margin="0,0,0,16">
+            <TextBlock Text="Expected SHA-256 Checksum (Optional)" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" Margin="0,0,0,5" />
+            <TextBox x:Name="Sha256TextBox" />
+        </StackPanel>
+
+        <StackPanel Grid.Row="7" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10">
+            <Button Content="Cancel" Classes="toolbar" MinWidth="90" IsCancel="True" Click="Cancel_Click" />
+            <Button Content="Add to Queue (Paused)" Classes="toolbar" MinWidth="150" Click="QueueLater_Click" />
+            <Button Content="Download Now" Classes="primary" MinWidth="130" IsDefault="True" Click="DownloadNow_Click" />
+        </StackPanel>
+    </Grid>
+</Window>

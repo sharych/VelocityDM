@@ -1,0 +1,75 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="VelocityDM.Mac.Views.ChromeExtensionWindow"
+        Title="macOS Chrome Extension Integration"
+        Icon="avares://VelocityDM/Assets/VelocityDM.png"
+        Width="650"
+        SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False"
+        Background="{StaticResource BgWindowBrush}">
+    <Grid Margin="22" RowDefinitions="Auto,Auto,Auto,Auto,Auto">
+        <TextBlock Text="Integrate VelocityDM with Google Chrome on macOS"
+                   FontSize="17"
+                   FontWeight="Bold"
+                   Margin="0,0,0,6" />
+        <TextBlock Grid.Row="1"
+                   Text="Registers Chrome Native Messaging so Chrome can auto-launch VelocityDM even when closed, and extracts the extension ready for 1-drag install."
+                   Foreground="{StaticResource TextSecondaryBrush}"
+                   TextWrapping="Wrap"
+                   Margin="0,0,0,14" />
+
+        <Border Grid.Row="2"
+                Background="{StaticResource BgSurfaceBrush}"
+                BorderBrush="{StaticResource BorderBrushSubtle}"
+                BorderThickness="1"
+                CornerRadius="6"
+                Padding="14"
+                Margin="0,0,0,14">
+            <StackPanel Spacing="6">
+                <TextBlock x:Name="NativeHostStatusText" FontWeight="SemiBold" Foreground="{StaticResource AccentCyanBrush}" />
+                <TextBlock Text="Extension Folder (extracted &amp; copied to clipboard automatically):"
+                           Foreground="{StaticResource TextSecondaryBrush}"
+                           FontSize="12" />
+                <TextBox x:Name="ExtPathTextBox" IsReadOnly="True" FontFamily="Menlo,Consolas,monospace" FontSize="12" />
+                <TextBlock Text="Pinned Extension ID: pcegcihecngonbfglmjgobmlafofmchk"
+                           Foreground="{StaticResource TextSecondaryBrush}"
+                           FontSize="11" />
+            </StackPanel>
+        </Border>
+
+        <Border Grid.Row="3"
+                Background="{StaticResource BgCardBrush}"
+                BorderBrush="{StaticResource BorderBrushSubtle}"
+                BorderThickness="1"
+                CornerRadius="6"
+                Padding="14"
+                Margin="0,0,0,18">
+            <StackPanel Spacing="5">
+                <TextBlock Text="One-Time Chrome Extension Step (macOS Chrome blocks silent third-party extension injection):"
+                           FontWeight="SemiBold"
+                           TextWrapping="Wrap" />
+                <TextBlock Text="1. Click 'Install Host &amp; Open Chrome Extensions' below — this registers Chrome Native Messaging, extracts the extension, copies its path, and opens Finder + chrome://extensions."
+                           TextWrapping="Wrap"
+                           Foreground="{StaticResource TextSecondaryBrush}" />
+                <TextBlock Text="2. In chrome://extensions, toggle 'Developer mode' ON (top-right)."
+                           TextWrapping="Wrap"
+                           Foreground="{StaticResource TextSecondaryBrush}" />
+                <TextBlock Text="3. Drag the ChromeExtension folder from Finder onto chrome://extensions (or click 'Load unpacked', press Cmd+Shift+G, paste with Cmd+V, and click Select)."
+                           TextWrapping="Wrap"
+                           Foreground="{StaticResource TextSecondaryBrush}" />
+                <TextBlock x:Name="FeedbackText"
+                           Foreground="{StaticResource SuccessBrush}"
+                           FontSize="12"
+                           TextWrapping="Wrap"
+                           Margin="0,4,0,0" />
+            </StackPanel>
+        </Border>
+
+        <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10">
+            <Button Content="Reveal in Finder" Classes="toolbar" Click="OpenFolder_Click" />
+            <Button Content="Close" Classes="toolbar" MinWidth="85" IsCancel="True" Click="Close_Click" />
+            <Button Content="Install Host &amp; Open Chrome Extensions" Classes="primary" Click="SetupAndOpenChrome_Click" />
+        </StackPanel>
+    </Grid>
+</Window>

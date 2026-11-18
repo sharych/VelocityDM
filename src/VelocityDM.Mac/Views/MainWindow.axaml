@@ -1,0 +1,373 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="VelocityDM.Mac.Views.MainWindow"
+        Title="VelocityDM — Parallel Download Manager"
+        Icon="avares://VelocityDM/Assets/VelocityDM.png"
+        Width="1200"
+        Height="760"
+        MinWidth="920"
+        MinHeight="600"
+        WindowStartupLocation="CenterScreen"
+        Background="{StaticResource BgWindowBrush}">
+    <Grid RowDefinitions="Auto,*,Auto">
+        <!-- Top Toolbar -->
+        <Border Grid.Row="0"
+                Background="{StaticResource BgSurfaceBrush}"
+                BorderBrush="{StaticResource BorderBrushSubtle}"
+                BorderThickness="0,0,0,1"
+                Padding="14,10">
+            <DockPanel LastChildFill="True">
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Spacing="8">
+                    <TextBlock Text="Filter:" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" />
+                    <TextBox Width="200" Text="{Binding SearchQuery}" Watermark="Search downloads..." />
+                </StackPanel>
+
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <Button Content="+ Add URL" Classes="primary" Click="AddUrl_Click" />
+                    <Button Content="Batch Import" Classes="toolbar" Margin="0,0,6,0" Click="BatchImport_Click" />
+                    <Button Content="▶ Resume" Classes="toolbar" Click="ResumeSelected_Click" />
+                    <Button Content="⏸ Pause" Classes="toolbar" Margin="0,0,6,0" Click="PauseSelected_Click" />
+                    <Button Content="Resume All" Classes="toolbar" Click="ResumeAll_Click" />
+                    <Button Content="Pause All" Classes="toolbar" Margin="0,0,6,0" Click="PauseAll_Click" />
+                    <Button Content="Remove" Classes="danger" Margin="0,0,6,0" Click="RemoveKeepFile_Click" />
+                    <Button Content="Delete File" Classes="danger" Margin="0,0,6,0" Click="RemoveDeleteFile_Click" />
+                    <Button Content="Chrome Ext" Classes="toolbar" Click="ChromeExtension_Click" />
+                    <Button Content="⚙ Settings" Classes="toolbar" Click="Settings_Click" />
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <!-- Main Body -->
+        <Grid Grid.Row="1" ColumnDefinitions="224,*">
+            <!-- Sidebar -->
+            <Border Grid.Column="0"
+                    Background="{StaticResource BgSurfaceBrush}"
+                    BorderBrush="{StaticResource BorderBrushSubtle}"
+                    BorderThickness="0,0,1,0"
+                    Padding="10,12">
+                <ScrollViewer>
+                    <StackPanel x:Name="SidebarStack" Spacing="2">
+                        <TextBlock Text="HTTP DOWNLOADS"
+                                   Foreground="{StaticResource TextSecondaryBrush}"
+                                   FontSize="11"
+                                   FontWeight="Bold"
+                                   Margin="8,0,0,6" />
+
+                        <RadioButton Classes="sidebar" GroupName="Sidebar" IsChecked="True" Tag="All" IsCheckedChanged="SidebarFilter_Changed">
+                            <Grid>
+                                <TextBlock Text="All Downloads" />
+                                <TextBlock Text="{Binding AllCount}" HorizontalAlignment="Right" Foreground="{StaticResource TextSecondaryBrush}" />
+                            </Grid>
+                        </RadioButton>
+                        <RadioButton Classes="sidebar" GroupName="Sidebar" Tag="Downloading" IsCheckedChanged="SidebarFilter_Changed">
+                            <Grid>
+                                <TextBlock Text="Downloading" />
+                                <TextBlock Text="{Binding DownloadingCount}" HorizontalAlignment="Right" Foreground="{StaticResource SuccessBrush}" />
+                            </Grid>
+                        </RadioButton>
+                        <RadioButton Classes="sidebar" GroupName="Sidebar" Tag="Queued" IsCheckedChanged="SidebarFilter_Changed">
+                            <Grid>
+                                <TextBlock Text="Queued" />
+                                <TextBlock Text="{Binding QueuedCount}" HorizontalAlignment="Right" Foreground="{StaticResource AccentCyanBrush}" />
+                            </Grid>
+                        </RadioButton>
+                        <RadioButton Classes="sidebar" GroupName="Sidebar" Tag="Paused" IsCheckedChanged="SidebarFilter_Changed">
+                            <Grid>
+                                <TextBlock Text="Paused" />
+                                <TextBlock Text="{Binding PausedCount}" HorizontalAlignment="Right" Foreground="{StaticResource WarningBrush}" />
+                            </Grid>
+                        </RadioButton>
+                        <RadioButton Classes="sidebar" GroupName="Sidebar" Tag="Completed" IsCheckedChanged="SidebarFilter_Changed">
+                            <Grid>
+                                <TextBlock Text="Completed" />
+                                <TextBlock Text="{Binding CompletedCount}" HorizontalAlignment="Right" Foreground="{StaticResource SuccessBrush}" />
+                            </Grid>
+                        </RadioButton>
+                        <RadioButton Classes="sidebar" GroupName="Sidebar" Tag="Error" IsCheckedChanged="SidebarFilter_Changed">
+                            <Grid>
+                                <TextBlock Text="Errors" />
+                                <TextBlock Text="{Binding ErrorCount}" HorizontalAlignment="Right" Foreground="{StaticResource DangerBrush}" />
+                            </Grid>
+                        </RadioButton>
+
+                        <TextBlock Text="CATEGORIES"
+                                   Foreground="{StaticResource TextSecondaryBrush}"
+                                   FontSize="11"
+                                   FontWeight="Bold"
+                                   Margin="8,16,0,6" />
+
+                        <RadioButton Classes="sidebar" GroupName="Sidebar" Tag="Programs" IsCheckedChanged="SidebarFilter_Changed">
+                            <Grid>
+                                <TextBlock Text="Programs" />
+                                <TextBlock Text="{Binding ProgramsCount}" HorizontalAlignment="Right" Foreground="{StaticResource TextSecondaryBrush}" />
+                            </Grid>
+                        </RadioButton>
+                        <RadioButton Classes="sidebar" GroupName="Sidebar" Tag="Compressed" IsCheckedChanged="SidebarFilter_Changed">
+                            <Grid>
+                                <TextBlock Text="Compressed" />
+                                <TextBlock Text="{Binding CompressedCount}" HorizontalAlignment="Right" Foreground="{StaticResource TextSecondaryBrush}" />
+                            </Grid>
+                        </RadioButton>
+                        <RadioButton Classes="sidebar" GroupName="Sidebar" Tag="Video" IsCheckedChanged="SidebarFilter_Changed">
+                            <Grid>
+                                <TextBlock Text="Video" />
+                                <TextBlock Text="{Binding VideoCount}" HorizontalAlignment="Right" Foreground="{StaticResource TextSecondaryBrush}" />
+                            </Grid>
+                        </RadioButton>
+                        <RadioButton Classes="sidebar" GroupName="Sidebar" Tag="Music" IsCheckedChanged="SidebarFilter_Changed">
+                            <Grid>
+                                <TextBlock Text="Music" />
+                                <TextBlock Text="{Binding MusicCount}" HorizontalAlignment="Right" Foreground="{StaticResource TextSecondaryBrush}" />
+                            </Grid>
+                        </RadioButton>
+                        <RadioButton Classes="sidebar" GroupName="Sidebar" Tag="Documents" IsCheckedChanged="SidebarFilter_Changed">
+                            <Grid>
+                                <TextBlock Text="Documents" />
+                                <TextBlock Text="{Binding DocumentsCount}" HorizontalAlignment="Right" Foreground="{StaticResource TextSecondaryBrush}" />
+                            </Grid>
+                        </RadioButton>
+                        <RadioButton Classes="sidebar" GroupName="Sidebar" Tag="Images" IsCheckedChanged="SidebarFilter_Changed">
+                            <Grid>
+                                <TextBlock Text="Images" />
+                                <TextBlock Text="{Binding ImagesCount}" HorizontalAlignment="Right" Foreground="{StaticResource TextSecondaryBrush}" />
+                            </Grid>
+                        </RadioButton>
+                        <RadioButton Classes="sidebar" GroupName="Sidebar" Tag="Other" IsCheckedChanged="SidebarFilter_Changed">
+                            <Grid>
+                                <TextBlock Text="Other" />
+                                <TextBlock Text="{Binding OtherCount}" HorizontalAlignment="Right" Foreground="{StaticResource TextSecondaryBrush}" />
+                            </Grid>
+                        </RadioButton>
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+
+            <!-- Content -->
+            <Grid Grid.Column="1" Margin="10" RowDefinitions="*,6,240">
+                <DataGrid x:Name="DownloadsGrid"
+                          Grid.Row="0"
+                          ItemsSource="{Binding FilteredItems}"
+                          SelectedItem="{Binding SelectedItem, Mode=TwoWay}"
+                          AutoGenerateColumns="False"
+                          IsReadOnly="True"
+                          CanUserReorderColumns="True"
+                          CanUserResizeColumns="True"
+                          SelectionMode="Single"
+                          GridLinesVisibility="Horizontal"
+                          Background="{StaticResource BgSurfaceBrush}"
+                          BorderBrush="{StaticResource BorderBrushSubtle}"
+                          BorderThickness="1"
+                          DoubleTapped="DownloadsGrid_DoubleTapped">
+                    <DataGrid.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem Header="Start / Resume" Click="ResumeSelected_Click" />
+                            <MenuItem Header="Force Start (Bypass Queue)" Click="ForceStartSelected_Click" />
+                            <MenuItem Header="Pause" Click="PauseSelected_Click" />
+                            <Separator />
+                            <MenuItem Header="Move Up in Queue" Click="MoveUp_Click" />
+                            <MenuItem Header="Move Down in Queue" Click="MoveDown_Click" />
+                            <Separator />
+                            <MenuItem Header="Open File" Click="OpenFile_Click" />
+                            <MenuItem Header="Reveal in Finder" Click="OpenFolder_Click" />
+                            <MenuItem Header="Copy Download URL" Click="CopyUrl_Click" />
+                            <MenuItem Header="Compute / Verify SHA-256" Click="VerifySha256_Click" />
+                            <Separator />
+                            <MenuItem Header="Remove from List (Keep File)" Click="RemoveKeepFile_Click" />
+                            <MenuItem Header="Remove &amp; Delete Local File" Click="RemoveDeleteFile_Click" />
+                        </ContextMenu>
+                    </DataGrid.ContextMenu>
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="File Name" Binding="{Binding FileName}" Width="*" MinWidth="180" />
+                        <DataGridTextColumn Header="Size" Binding="{Binding DownloadedText}" Width="125" />
+                        <DataGridTemplateColumn Header="Progress" Width="145">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <Grid VerticalAlignment="Center" Margin="4,0">
+                                        <ProgressBar Value="{Binding ProgressPercent}"
+                                                     Maximum="100"
+                                                     Height="18"
+                                                     Background="#0F172A"
+                                                     Foreground="{Binding StatusBrush}" />
+                                        <TextBlock Text="{Binding ProgressText}"
+                                                   HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center"
+                                                   FontSize="11"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="{StaticResource TextPrimaryBrush}" />
+                                    </Grid>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <DataGridTemplateColumn Header="Status" Width="105">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <Border Background="#0F172A"
+                                            BorderBrush="{Binding StatusBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="4"
+                                            Padding="6,2"
+                                            Margin="4,0"
+                                            HorizontalAlignment="Left"
+                                            VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding StatusDisplay}" Foreground="{Binding StatusBrush}" FontSize="11" FontWeight="SemiBold" />
+                                    </Border>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <DataGridTextColumn Header="Speed" Binding="{Binding SpeedText}" Width="88" />
+                        <DataGridTextColumn Header="Conns" Binding="{Binding ConnectionsText}" Width="66" />
+                        <DataGridTextColumn Header="ETA" Binding="{Binding EtaText}" Width="62" />
+                        <DataGridTextColumn Header="Category" Binding="{Binding CategoryLabel}" Width="92" />
+                        <DataGridTextColumn Header="Added" Binding="{Binding AddedAtText}" Width="118" />
+                    </DataGrid.Columns>
+                </DataGrid>
+
+                <GridSplitter Grid.Row="1" Height="6" Background="Transparent" ResizeDirection="Rows" />
+
+                <!-- Details + Segments -->
+                <Grid Grid.Row="2" ColumnDefinitions="1.05*,10,1.35*">
+                    <Border Grid.Column="0"
+                            Background="{StaticResource BgSurfaceBrush}"
+                            BorderBrush="{StaticResource BorderBrushSubtle}"
+                            BorderThickness="1"
+                            CornerRadius="6"
+                            Padding="12">
+                        <Grid DataContext="{Binding SelectedItem}" RowDefinitions="Auto,*,Auto">
+                            <TextBlock Text="DOWNLOAD DETAILS"
+                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                       FontSize="11"
+                                       FontWeight="Bold"
+                                       Margin="0,0,0,8" />
+
+                            <ScrollViewer Grid.Row="1">
+                                <StackPanel Spacing="4">
+                                    <TextBlock Text="{Binding FileName, FallbackValue='Select a download to inspect details'}"
+                                               FontWeight="SemiBold"
+                                               FontSize="14"
+                                               TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Text="{Binding Url, StringFormat='URL: {0}'}"
+                                               Foreground="{StaticResource AccentCyanBrush}"
+                                               FontSize="12"
+                                               TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Text="{Binding TargetFilePath, StringFormat='Save Path: {0}'}"
+                                               Foreground="{StaticResource TextSecondaryBrush}"
+                                               FontSize="12"
+                                               TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Text="{Binding RangeSupportText, StringFormat='Mode: {0}'}"
+                                               Foreground="{StaticResource TextPrimaryBrush}"
+                                               FontSize="12" />
+                                    <TextBlock Text="{Binding HashSummaryText, StringFormat='SHA-256: {0}'}"
+                                               Foreground="{StaticResource TextSecondaryBrush}"
+                                               FontSize="12"
+                                               TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Text="{Binding ErrorMessage}"
+                                               Foreground="{StaticResource DangerBrush}"
+                                               FontSize="12"
+                                               TextWrapping="Wrap" />
+                                </StackPanel>
+                            </ScrollViewer>
+
+                            <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="6" Margin="0,8,0,0">
+                                <Button Content="Open File" Classes="toolbar" Padding="10,4" Click="OpenFile_Click" />
+                                <Button Content="Reveal in Finder" Classes="toolbar" Padding="10,4" Click="OpenFolder_Click" />
+                                <Button Content="Verify SHA-256" Classes="toolbar" Padding="10,4" Click="VerifySha256_Click" />
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <Border Grid.Column="2"
+                            Background="{StaticResource BgSurfaceBrush}"
+                            BorderBrush="{StaticResource BorderBrushSubtle}"
+                            BorderThickness="1"
+                            CornerRadius="6"
+                            Padding="12">
+                        <Grid DataContext="{Binding SelectedItem}" RowDefinitions="Auto,Auto,*">
+                            <Grid Grid.Row="0" Margin="0,0,0,8">
+                                <TextBlock Text="PARALLEL SEGMENTS MAP"
+                                           Foreground="{StaticResource TextSecondaryBrush}"
+                                           FontSize="11"
+                                           FontWeight="Bold"
+                                           VerticalAlignment="Center" />
+                                <TextBlock Text="{Binding ConnectionsText}"
+                                           HorizontalAlignment="Right"
+                                           Foreground="{StaticResource AccentCyanBrush}"
+                                           FontSize="12"
+                                           FontWeight="SemiBold" />
+                            </Grid>
+
+                            <Border Grid.Row="1"
+                                    Background="#0F172A"
+                                    BorderBrush="{StaticResource BorderBrushSubtle}"
+                                    BorderThickness="1"
+                                    CornerRadius="4"
+                                    Padding="3"
+                                    Margin="0,0,0,8">
+                                <ItemsControl ItemsSource="{Binding Segments}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <UniformGrid Rows="1" />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <ProgressBar Value="{Binding ProgressPercent}"
+                                                         Maximum="100"
+                                                         Height="14"
+                                                         Margin="1,0"
+                                                         Background="#1E293B"
+                                                         Foreground="{Binding StatusBrush}" />
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </Border>
+
+                            <DataGrid Grid.Row="2"
+                                      ItemsSource="{Binding Segments}"
+                                      AutoGenerateColumns="False"
+                                      IsReadOnly="True"
+                                      Background="{StaticResource BgSurfaceBrush}"
+                                      BorderBrush="{StaticResource BorderBrushSubtle}"
+                                      BorderThickness="1">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Seg" Binding="{Binding Header}" Width="46" />
+                                    <DataGridTextColumn Header="Byte Range" Binding="{Binding RangeText}" Width="*" />
+                                    <DataGridTextColumn Header="Downloaded" Binding="{Binding DownloadedText}" Width="140" />
+                                    <DataGridTextColumn Header="%" Binding="{Binding ProgressText}" Width="62" />
+                                    <DataGridTextColumn Header="Speed" Binding="{Binding SpeedText}" Width="88" />
+                                    <DataGridTextColumn Header="State" Binding="{Binding StatusText}" Width="85" />
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </Grid>
+                    </Border>
+                </Grid>
+            </Grid>
+        </Grid>
+
+        <!-- Status Bar -->
+        <Border Grid.Row="2"
+                Background="{StaticResource BgSurfaceBrush}"
+                BorderBrush="{StaticResource BorderBrushSubtle}"
+                BorderThickness="0,1,0,0"
+                Padding="14,7">
+            <DockPanel LastChildFill="True">
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="10">
+                    <TextBlock Text="Speed Cap:" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" FontSize="12" />
+                    <ComboBox Width="115"
+                              ItemsSource="{Binding SpeedPresets}"
+                              SelectedItem="{Binding SelectedSpeedLimit, Mode=TwoWay}" />
+                    <TextBlock Text="{Binding TotalSpeedText}"
+                               Foreground="{StaticResource SuccessBrush}"
+                               FontWeight="SemiBold"
+                               VerticalAlignment="Center"
+                               MinWidth="80"
+                               TextAlignment="Right" />
+                </StackPanel>
+
+                <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding StatusBarSummary}" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" />
+                    <TextBlock Text="{Binding StatusMessage}" Foreground="{StaticResource AccentCyanBrush}" FontSize="12" />
+                </StackPanel>
+            </DockPanel>
+        </Border>
+    </Grid>
+</Window>

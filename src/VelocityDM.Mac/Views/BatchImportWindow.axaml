@@ -1,0 +1,76 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="VelocityDM.Mac.Views.BatchImportWindow"
+        Title="Batch Link Import &amp; Wildcard Expander"
+        Icon="avares://VelocityDM/Assets/VelocityDM.png"
+        Width="700"
+        Height="560"
+        WindowStartupLocation="CenterOwner"
+        Background="{StaticResource BgWindowBrush}">
+    <Grid Margin="20" RowDefinitions="Auto,140,Auto,*,Auto,Auto">
+        <TextBlock Text="Paste URLs (one per line) or use wildcard patterns like https://example.com/part[01-10].zip"
+                   Foreground="{StaticResource TextSecondaryBrush}"
+                   FontSize="12"
+                   Margin="0,0,0,6" />
+
+        <TextBox x:Name="RawUrlsTextBox"
+                 Grid.Row="1"
+                 AcceptsReturn="True"
+                 FontFamily="Menlo,Consolas,monospace"
+                 FontSize="12"
+                 TextChanged="RawUrlsTextBox_TextChanged" />
+
+        <Grid Grid.Row="2" Margin="0,12,0,6">
+            <TextBlock x:Name="PreviewHeaderText"
+                       Text="Expanded Links Preview (0)"
+                       Foreground="{StaticResource AccentCyanBrush}"
+                       FontWeight="SemiBold"
+                       VerticalAlignment="Center" />
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="6">
+                <Button Content="Select All" Classes="toolbar" Padding="10,4" Click="SelectAll_Click" />
+                <Button Content="Clear Selection" Classes="toolbar" Padding="10,4" Click="SelectNone_Click" />
+            </StackPanel>
+        </Grid>
+
+        <ListBox x:Name="PreviewListBox"
+                 Grid.Row="3"
+                 Background="{StaticResource BgSurfaceBrush}"
+                 BorderBrush="{StaticResource BorderBrushSubtle}"
+                 BorderThickness="1"
+                 Margin="0,0,0,12">
+            <ListBox.ItemTemplate>
+                <DataTemplate>
+                    <CheckBox IsChecked="{Binding IsSelected}" Content="{Binding Url}" Margin="4,2" />
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+
+        <Grid Grid.Row="4" ColumnDefinitions="2*,Auto,16,*" Margin="0,0,0,14">
+            <StackPanel Grid.Column="0">
+                <TextBlock Text="Save Folder (leave default to auto-categorize)" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" Margin="0,0,0,4" />
+                <TextBox x:Name="CustomDirTextBox" />
+            </StackPanel>
+            <Button Grid.Column="1"
+                    Content="Browse..."
+                    VerticalAlignment="Bottom"
+                    Margin="8,0,0,0"
+                    Classes="toolbar"
+                    Click="Browse_Click" />
+            <StackPanel Grid.Column="3">
+                <TextBlock x:Name="ConnLabel" Text="Connections: 8" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" Margin="0,0,0,4" />
+                <Slider x:Name="ConnectionsSlider"
+                        Minimum="1"
+                        Maximum="32"
+                        TickFrequency="1"
+                        IsSnapToTickEnabled="True"
+                        ValueChanged="ConnectionsSlider_ValueChanged" />
+            </StackPanel>
+        </Grid>
+
+        <StackPanel Grid.Row="5" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10">
+            <Button Content="Cancel" Classes="toolbar" MinWidth="90" IsCancel="True" Click="Cancel_Click" />
+            <Button Content="Queue Selected (Paused)" Classes="toolbar" MinWidth="150" Click="QueuePaused_Click" />
+            <Button Content="Start Selected Downloads" Classes="primary" MinWidth="170" IsDefault="True" Click="StartNow_Click" />
+        </StackPanel>
+    </Grid>
+</Window>
