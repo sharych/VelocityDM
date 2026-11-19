@@ -49,7 +49,7 @@
         <StackPanel Grid.Row="4" Margin="0,0,0,12">
             <TextBlock Text="Save To Folder" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" Margin="0,0,0,5" />
             <Grid ColumnDefinitions="*,Auto">
-                <TextBox x:Name="SaveDirTextBox" TextChanged="SaveDirTextBox_TextChanged" />
+                <TextBox x:Name="SaveDirTextBox" />
                 <Button Grid.Column="1"
                         Content="Browse..."
                         Margin="8,0,0,0"

@@ -119,7 +119,7 @@ public partial class MainWindow : Window
 
             var opts = dialog.ResultOptions with
             {
-                CustomFileName = dialog.ResultOptions.CustomFileName ?? customFileName,
+                CustomFileName = dialog.ResultOptions.CustomFileName ?? (dialog.ProbeResolvedFileName ? null : customFileName),
                 Referrer = referrer,
                 CookieHeader = cookies,
                 UserAgentOverride = userAgent

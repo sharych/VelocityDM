@@ -15,11 +15,13 @@ public partial class AddDownloadWindow : Window
     private readonly AppSettings _settings;
     private CancellationTokenSource? _probeCts;
     private string _baseDirectory;
+    private string _lastAutoPopulatedSaveDir = string.Empty;
+    private string _lastAutoPopulatedFileName = string.Empty;
     private bool _userEditedFolder;
-    private bool _userEditedFileName;
     private bool _userEditedCategory;
-    private bool _suppressFieldTracking;
+    private bool _suppressUpdates;
 
+    public bool ProbeResolvedFileName { get; private set; }
     public AddDownloadOptions? ResultOptions { get; private set; }
     public AppSettings? UpdatedSettingsToPersist { get; private set; }
 
@@ -28,21 +30,16 @@ public partial class AddDownloadWindow : Window
         InitializeComponent();
         _manager = manager;
         _settings = manager.Settings;
-        _baseDirectory = _settings.DefaultDownloadDirectory;
+        _baseDirectory = FileCategoryClassifier.SanitizeCorruptedCategoryNesting(_settings.DefaultDownloadDirectory);
 
-        _suppressFieldTracking = true;
+        _suppressUpdates = true;
         CategoryComboBox.ItemsSource = Enum.GetValues<FileCategory>();
         CategoryComboBox.SelectedItem = FileCategory.Other;
         ConnectionsSlider.Value = _settings.DefaultConnectionsPerDownload;
         RememberLocationCheckBox.IsChecked = _settings.RememberCustomDownloadLocation;
         CreateHierarchyCheckBox.IsChecked = _settings.CategorizeIntoSubfolders;
         UpdateSaveDirectoryFromCategory();
-        _suppressFieldTracking = false;
-
-        FileNameTextBox.TextChanged += (_, _) =>
-        {
-            if (!_suppressFieldTracking) _userEditedFileName = true;
-        };
+        _suppressUpdates = false;
 
         if (bringToFront)
         {
@@ -83,10 +80,11 @@ public partial class AddDownloadWindow : Window
 
     private void CategoryComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (!_suppressFieldTracking)
+        if (!_suppressUpdates)
         {
             _userEditedCategory = true;
         }
+        SyncManualFolderEdit();
         if (!_userEditedFolder || CreateHierarchyCheckBox.IsChecked == true)
         {
             UpdateSaveDirectoryFromCategory();
@@ -96,53 +94,39 @@ public partial class AddDownloadWindow : Window
     private void UrlTextBox_TextChanged(object sender, TextChangedEventArgs e)
     {
         var text = UrlTextBox.Text.Trim();
-        if (!_userEditedFileName && Uri.TryCreate(text, UriKind.Absolute, out var uri) &&
+        if (!HasUserEditedFileName() && Uri.TryCreate(text, UriKind.Absolute, out var uri) &&
             (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps))
         {
             var seg = Path.GetFileName(uri.AbsolutePath);
             if (!string.IsNullOrWhiteSpace(seg) && seg != "/")
             {
                 var guessed = FileCategoryClassifier.SanitizeFileName(Uri.UnescapeDataString(seg));
-                _suppressFieldTracking = true;
-                FileNameTextBox.Text = guessed;
+                SetAutoFileName(guessed);
                 if (!_userEditedCategory)
                 {
+                    _suppressUpdates = true;
                     CategoryComboBox.SelectedItem = FileCategoryClassifier.Classify(guessed);
+                    _suppressUpdates = false;
                     if (!_userEditedFolder || CreateHierarchyCheckBox.IsChecked == true)
                         UpdateSaveDirectoryFromCategory();
                 }
-                _suppressFieldTracking = false;
             }
-        }
-    }
-
-    private void SaveDirTextBox_TextChanged(object sender, TextChangedEventArgs e)
-    {
-        if (_suppressFieldTracking)
-            return;
-
-        _userEditedFolder = true;
-        var entered = SaveDirTextBox.Text.Trim();
-        if (!string.IsNullOrWhiteSpace(entered))
-        {
-            _baseDirectory = entered;
         }
     }
 
     private void CreateHierarchyCheckBox_Changed(object sender, RoutedEventArgs e)
     {
-        if (_suppressFieldTracking)
+        if (_suppressUpdates)
             return;
 
+        SyncManualFolderEdit();
         UpdateSaveDirectoryFromCategory();
     }
 
     private void CreateHierarchy_Click(object sender, RoutedEventArgs e)
     {
-        string targetRoot = string.IsNullOrWhiteSpace(_baseDirectory)
-            ? SaveDirTextBox.Text.Trim()
-            : _baseDirectory;
-
+        SyncManualFolderEdit();
+        string targetRoot = _baseDirectory;
         if (string.IsNullOrWhiteSpace(targetRoot))
         {
             MessageBox.Show(this, "Please choose a valid folder first.", "VelocityDM", MessageBoxButton.OK, MessageBoxImage.Warning);
@@ -152,10 +136,9 @@ public partial class AddDownloadWindow : Window
         try
         {
             FileCategoryClassifier.CreateCategoryHierarchy(targetRoot);
-            _baseDirectory = targetRoot;
-            _suppressFieldTracking = true;
+            _suppressUpdates = true;
             CreateHierarchyCheckBox.IsChecked = true;
-            _suppressFieldTracking = false;
+            _suppressUpdates = false;
             UpdateSaveDirectoryFromCategory();
             ProbeInfoTextBlock.Text = $"Created category folders (Programs, Compressed, Video, Music, Documents, Images, Other, Torrents) in {targetRoot}";
         }
@@ -191,20 +174,21 @@ public partial class AddDownloadWindow : Window
         try
         {
             ProbeResult probe = await _manager.ProbeUrlAsync(url, token);
-            _suppressFieldTracking = true;
-            if (!_userEditedFileName || string.IsNullOrWhiteSpace(FileNameTextBox.Text))
+            if (!HasUserEditedFileName() || string.IsNullOrWhiteSpace(FileNameTextBox.Text))
             {
-                FileNameTextBox.Text = probe.FileName;
+                SetAutoFileName(probe.FileName);
+                ProbeResolvedFileName = true;
             }
             if (!_userEditedCategory)
             {
+                _suppressUpdates = true;
                 CategoryComboBox.SelectedItem = probe.SuggestedCategory;
+                _suppressUpdates = false;
             }
             if (!_userEditedFolder || CreateHierarchyCheckBox.IsChecked == true)
             {
                 UpdateSaveDirectoryFromCategory();
             }
-            _suppressFieldTracking = false;
 
             string sizeDesc = probe.TotalBytes is > 0 ? ByteFormatter.FormatBytes(probe.TotalBytes) : "Unknown size";
             string rangeDesc = probe.SupportsRanges
@@ -260,6 +244,8 @@ public partial class AddDownloadWindow : Window
             return;
         }
 
+        SyncManualFolderEdit();
+
         bool useHierarchy = CreateHierarchyCheckBox.IsChecked == true;
         bool rememberLocation = RememberLocationCheckBox.IsChecked == true;
         string enteredDir = SaveDirTextBox.Text.Trim();
@@ -277,27 +263,30 @@ public partial class AddDownloadWindow : Window
             }
         }
 
-        if (rememberLocation && !string.IsNullOrWhiteSpace(rootDir))
-        {
-            var updated = _settings.Clone();
-            updated.RememberCustomDownloadLocation = true;
-            updated.DefaultDownloadDirectory = rootDir;
-            updated.CategorizeIntoSubfolders = useHierarchy;
-            UpdatedSettingsToPersist = updated;
-        }
-        else if (_settings.RememberCustomDownloadLocation != rememberLocation)
+        bool baseChanged = _userEditedFolder &&
+                           !string.IsNullOrWhiteSpace(rootDir) &&
+                           !string.Equals(rootDir, _settings.DefaultDownloadDirectory, StringComparison.OrdinalIgnoreCase);
+
+        if ((rememberLocation && (baseChanged || useHierarchy != _settings.CategorizeIntoSubfolders)) ||
+            _settings.RememberCustomDownloadLocation != rememberLocation)
         {
             var updated = _settings.Clone();
             updated.RememberCustomDownloadLocation = rememberLocation;
+            if (rememberLocation && !string.IsNullOrWhiteSpace(rootDir))
+            {
+                updated.DefaultDownloadDirectory = rootDir;
+                updated.CategorizeIntoSubfolders = useHierarchy;
+            }
             UpdatedSettingsToPersist = updated;
         }
 
-        string? customDir = !string.IsNullOrWhiteSpace(enteredDir) ? enteredDir : null;
+        string fileName = FileNameTextBox.Text.Trim();
+        string? customDir = (_userEditedFolder || useHierarchy) && !string.IsNullOrWhiteSpace(enteredDir) ? enteredDir : null;
 
         ResultOptions = new AddDownloadOptions(
             Url: uri.AbsoluteUri,
-            CustomFileName: _userEditedFileName && !string.IsNullOrWhiteSpace(FileNameTextBox.Text) ? FileNameTextBox.Text.Trim() : null,
-            CustomDirectory: (_userEditedFolder || rememberLocation || useHierarchy) ? customDir : null,
+            CustomFileName: (HasUserEditedFileName() || ProbeResolvedFileName) && !string.IsNullOrWhiteSpace(fileName) ? fileName : null,
+            CustomDirectory: customDir,
             CategoryOverride: _userEditedCategory && CategoryComboBox.SelectedItem is FileCategory cat ? cat : null,
             Connections: (int)Math.Round(ConnectionsSlider.Value),
             ExpectedSha256: string.IsNullOrWhiteSpace(Sha256TextBox.Text) ? null : Sha256TextBox.Text.Trim(),
@@ -307,15 +296,39 @@ public partial class AddDownloadWindow : Window
         Close();
     }
 
+    private void SyncManualFolderEdit()
+    {
+        string entered = SaveDirTextBox.Text.Trim();
+        if (!string.IsNullOrWhiteSpace(entered) &&
+            !string.Equals(entered, _lastAutoPopulatedSaveDir, StringComparison.OrdinalIgnoreCase))
+        {
+            _userEditedFolder = true;
+            _baseDirectory = entered;
+        }
+    }
+
+    private bool HasUserEditedFileName()
+    {
+        string current = FileNameTextBox.Text.Trim();
+        return !string.IsNullOrWhiteSpace(current) &&
+               !string.Equals(current, _lastAutoPopulatedFileName, StringComparison.Ordinal);
+    }
+
+    private void SetAutoFileName(string name)
+    {
+        _lastAutoPopulatedFileName = name;
+        FileNameTextBox.Text = name;
+    }
+
     private void UpdateSaveDirectoryFromCategory()
     {
         var cat = CategoryComboBox.SelectedItem is FileCategory c ? c : FileCategory.Other;
         bool useHierarchy = CreateHierarchyCheckBox != null && CreateHierarchyCheckBox.IsChecked == true;
         string root = string.IsNullOrWhiteSpace(_baseDirectory) ? _settings.DefaultDownloadDirectory : _baseDirectory;
+        string resolved = FileCategoryClassifier.ResolveSaveDirectory(root, cat, useHierarchy);
 
-        _suppressFieldTracking = true;
-        SaveDirTextBox.Text = FileCategoryClassifier.ResolveSaveDirectory(root, cat, useHierarchy);
-        _suppressFieldTracking = false;
+        _lastAutoPopulatedSaveDir = resolved;
+        SaveDirTextBox.Text = resolved;
     }
 
     protected override void OnClosed(EventArgs e)

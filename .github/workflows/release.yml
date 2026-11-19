@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Release version (e.g. v2.3.0)'
+        description: 'Release version (e.g. v2.3.1)'
         required: true
-        default: 'v2.3.0'
+        default: 'v2.3.1'
 
 permissions:
   contents: write
@@ -33,7 +33,7 @@ jobs:
           fi
           clean="${raw#v}"
           if ! [[ "$clean" =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]]; then
-            clean="2.3.0"
+            clean="2.3.1"
           fi
           echo "tag=v$clean" >> "$GITHUB_OUTPUT"
           echo "version=$clean" >> "$GITHUB_OUTPUT"

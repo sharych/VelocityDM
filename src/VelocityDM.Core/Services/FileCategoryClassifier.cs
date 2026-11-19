@@ -118,11 +118,53 @@ public static partial class FileCategoryClassifier
         _ => "Other"
     };
 
+    private static readonly HashSet<string> CategoryFolderNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Programs", "Compressed", "Video", "Music", "Documents", "Images", "Other", "Torrents"
+    };
+
     public static string ResolveSaveDirectory(string baseDirectory, FileCategory category, bool categorizeIntoSubfolders)
     {
         return categorizeIntoSubfolders
             ? Path.Combine(baseDirectory, GetCategorySubfolder(category))
             : baseDirectory;
+    }
+
+    /// <summary>
+    /// Repairs paths that were accidentally nested by repeated category-folder appending
+    /// (for example ".../VelocityDM/Other/Compressed/Other" -> ".../VelocityDM").
+    /// </summary>
+    public static string SanitizeCorruptedCategoryNesting(string directory)
+    {
+        if (string.IsNullOrWhiteSpace(directory))
+            return directory;
+
+        string trimmed = directory.Trim().TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        if (string.IsNullOrEmpty(trimmed))
+            return directory;
+
+        var segments = new List<string>();
+        string current = trimmed;
+        while (true)
+        {
+            string? name = Path.GetFileName(current);
+            string? parent = Path.GetDirectoryName(current);
+            if (string.IsNullOrEmpty(name) || string.IsNullOrEmpty(parent) || !CategoryFolderNames.Contains(name))
+                break;
+
+            segments.Add(name);
+            current = parent.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        }
+
+        // Only strip if 2+ consecutive trailing category folders exist, OR 1 trailing category
+        // folder directly under a "VelocityDM" root folder.
+        if (segments.Count >= 2 ||
+            (segments.Count == 1 && string.Equals(Path.GetFileName(current), "VelocityDM", StringComparison.OrdinalIgnoreCase)))
+        {
+            return current;
+        }
+
+        return directory.Trim();
     }
 
     /// <summary>

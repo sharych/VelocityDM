@@ -5,7 +5,7 @@ namespace VelocityDM.Core.Models;
 /// </summary>
 public sealed class AppSettings
 {
-    public const int CurrentSchemaVersion = 2;
+    public const int CurrentSchemaVersion = 3;
 
     public int SettingsSchemaVersion { get; set; } = 0;
 
@@ -113,20 +113,31 @@ public sealed class AppSettings
     }
 
     /// <summary>
-    /// Upgrades legacy defaults (such as v1's 8-connection default) to current defaults (32 connections).
+    /// Upgrades legacy defaults and repairs corrupted nested category paths from earlier builds.
     /// </summary>
     public bool ApplyMigrations()
     {
         bool changed = false;
-        if (SettingsSchemaVersion < CurrentSchemaVersion)
+        if (SettingsSchemaVersion < 2)
         {
             if (DefaultConnectionsPerDownload == 8)
             {
                 DefaultConnectionsPerDownload = 32;
             }
+            changed = true;
+        }
+
+        if (SettingsSchemaVersion < 3)
+        {
+            string cleaned = Services.FileCategoryClassifier.SanitizeCorruptedCategoryNesting(DefaultDownloadDirectory);
+            if (!string.Equals(cleaned, DefaultDownloadDirectory, StringComparison.Ordinal))
+            {
+                DefaultDownloadDirectory = cleaned;
+            }
             SettingsSchemaVersion = CurrentSchemaVersion;
             changed = true;
         }
+
         return changed;
     }
 }

@@ -217,11 +217,44 @@ public sealed class UnitTests
             Assert.Equal("movie.mp4", dest.FileName);
             Assert.Equal(FileCategory.Video, dest.Category);
             Assert.Equal(Path.Combine(tempDir, "Video"), dest.SaveDirectory);
+
+            string nested = Path.Combine(tempDir, "Other", "Compressed", "Compressed", "Other", "Other");
+            Assert.Equal(tempDir, FileCategoryClassifier.SanitizeCorruptedCategoryNesting(nested));
+            Assert.Equal(Path.Combine(tempDir, "MyVideos"), FileCategoryClassifier.SanitizeCorruptedCategoryNesting(Path.Combine(tempDir, "MyVideos")));
         }
         finally
         {
             if (Directory.Exists(tempDir))
                 Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task JsonStateStore_RepairsCorruptedNestedDefaultDirectoryFromV2()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), "vdm_v3mig_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            string baseRoot = Path.Combine(tempDir, "VelocityDM");
+            string corrupted = Path.Combine(baseRoot, "Other", "Compressed", "Compressed", "Other", "Other");
+            await File.WriteAllTextAsync(Path.Combine(tempDir, "settings.json"), $$"""
+                {
+                  "SettingsSchemaVersion": 2,
+                  "DefaultDownloadDirectory": {{System.Text.Json.JsonSerializer.Serialize(corrupted)}},
+                  "CategorizeIntoSubfolders": true,
+                  "DefaultConnectionsPerDownload": 32
+                }
+                """);
+
+            var store = new JsonStateStore(tempDir);
+            var loaded = await store.LoadSettingsAsync();
+            Assert.Equal(baseRoot, loaded.DefaultDownloadDirectory);
+            Assert.Equal(AppSettings.CurrentSchemaVersion, loaded.SettingsSchemaVersion);
+        }
+        finally
+        {
+            Directory.Delete(tempDir, recursive: true);
         }
     }
 }
