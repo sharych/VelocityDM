@@ -29,7 +29,9 @@ function createChromeHarness(options = {}) {
     paused: [],
     resumed: [],
     cancelled: [],
-    erased: []
+    erased: [],
+    tabScripts: [],
+    notifications: []
   };
 
   class MockDate extends Date {
@@ -102,6 +104,24 @@ function createChromeHarness(options = {}) {
       cookies: {
         getAll: async () => []
       },
+      tabs: {
+        query: async () => options.activeTabs ?? [{ id: 1 }]
+      },
+      scripting: {
+        executeScript: async (details) => {
+          calls.tabScripts.push(details);
+          if (options.failScripting) {
+            throw new Error("Cannot access chrome:// URL");
+          }
+          return [{ result: true }];
+        }
+      },
+      notifications: {
+        create: (id, notifOptions) => {
+          calls.notifications.push({ id, ...notifOptions });
+        },
+        clear: () => {}
+      },
       downloads: {
         onCreated: { addListener: (fn) => listeners.downloadCreated.push(fn) },
         search: (query, cb) => {
@@ -156,7 +176,14 @@ function createChromeHarness(options = {}) {
         }
         return {
           ok: true,
-          json: async () => ({ ok: true })
+          json: async () => ({
+            ok: true,
+            app: "VelocityDM",
+            mode: "popup",
+            fileName: "sample.zip",
+            saveDirectory: "/Downloads/VelocityDM/Compressed",
+            connections: 32
+          })
         };
       }
     };
@@ -423,4 +450,40 @@ test("blocks startup downloads even if onCreated fires right before onStartup or
   });
 
   assert.equal(h.calls.fetch.length, 1);
+});
+
+test("shows in-tab Chrome popup on user click and falls back to Chrome notification on restricted pages", async () => {
+  const baseNow = 1_700_000_000_000;
+
+  const hTab = createChromeHarness({ initialNow: baseNow });
+  await hTab.triggerStartup();
+  hTab.advanceTime(4_000);
+
+  await hTab.triggerDownloadCreated({
+    id: 901,
+    url: "https://example.com/movie.mp4",
+    state: "in_progress",
+    paused: false,
+    startTime: new Date(hTab.now).toISOString()
+  });
+
+  assert.equal(hTab.calls.tabScripts.length, 1);
+  assert.equal(hTab.calls.tabScripts[0].args[0].saveDirectory, "/Downloads/VelocityDM/Compressed");
+  assert.equal(hTab.calls.tabScripts[0].args[0].connections, 32);
+  assert.equal(hTab.calls.notifications.length, 0);
+
+  const hNotif = createChromeHarness({ initialNow: baseNow, failScripting: true });
+  await hNotif.triggerStartup();
+  hNotif.advanceTime(4_000);
+
+  await hNotif.triggerDownloadCreated({
+    id: 902,
+    url: "https://example.com/archive.zip",
+    state: "in_progress",
+    paused: false,
+    startTime: new Date(hNotif.now).toISOString()
+  });
+
+  assert.equal(hNotif.calls.notifications.length, 1);
+  assert.match(hNotif.calls.notifications[0].message, /Save to: \/Downloads\/VelocityDM\/Compressed/);
 });

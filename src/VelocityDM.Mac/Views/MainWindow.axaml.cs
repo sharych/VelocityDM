@@ -50,12 +50,32 @@ public partial class MainWindow : Window
         string? customFileName = null,
         string? referrer = null,
         string? cookies = null,
-        string? userAgent = null)
+        string? userAgent = null,
+        bool bringToFront = false)
     {
-        var dialog = new AddDownloadWindow(_viewModel.Manager, prefillUrl);
-        bool accepted = await ShowOwnedDialogAsync(dialog);
+        var dialog = new AddDownloadWindow(_viewModel.Manager, prefillUrl, bringToFront);
+        bool accepted;
+        if (IsVisible)
+        {
+            dialog.WindowStartupLocation = WindowStartupLocation.CenterOwner;
+            accepted = await dialog.ShowDialog<bool>(this);
+        }
+        else
+        {
+            dialog.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+            var tcs = new TaskCompletionSource<bool>();
+            dialog.Closed += (_, _) => tcs.TrySetResult(dialog.Accepted);
+            dialog.Show();
+            accepted = await tcs.Task;
+        }
+
         if (accepted && dialog.ResultOptions != null)
         {
+            if (dialog.UpdatedSettingsToPersist != null)
+            {
+                await _viewModel.Manager.UpdateSettingsAsync(dialog.UpdatedSettingsToPersist);
+            }
+
             var opts = dialog.ResultOptions with
             {
                 CustomFileName = dialog.ResultOptions.CustomFileName ?? customFileName,

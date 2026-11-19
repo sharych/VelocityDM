@@ -95,13 +95,28 @@ public partial class MainWindow : Window
         string? customFileName = null,
         string? referrer = null,
         string? cookies = null,
-        string? userAgent = null)
+        string? userAgent = null,
+        bool bringToFront = false)
     {
-        var dialog = new AddDownloadWindow(_viewModel.Manager, prefillUrl);
-        if (IsVisible) dialog.Owner = this;
+        var dialog = new AddDownloadWindow(_viewModel.Manager, prefillUrl, bringToFront);
+        if (IsVisible)
+        {
+            dialog.Owner = this;
+            dialog.WindowStartupLocation = WindowStartupLocation.CenterOwner;
+        }
+        else
+        {
+            dialog.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+            dialog.ShowInTaskbar = true;
+        }
 
         if (dialog.ShowDialog() == true && dialog.ResultOptions != null)
         {
+            if (dialog.UpdatedSettingsToPersist != null)
+            {
+                await _viewModel.Manager.UpdateSettingsAsync(dialog.UpdatedSettingsToPersist);
+            }
+
             var opts = dialog.ResultOptions with
             {
                 CustomFileName = dialog.ResultOptions.CustomFileName ?? customFileName,

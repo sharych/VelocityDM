@@ -42,7 +42,10 @@ public sealed class JsonStateStore
         {
             if (!File.Exists(_settingsFilePath))
             {
-                var defaults = new AppSettings();
+                var defaults = new AppSettings
+                {
+                    SettingsSchemaVersion = AppSettings.CurrentSchemaVersion
+                };
                 defaults.Normalize();
                 return defaults;
             }
@@ -50,12 +53,20 @@ public sealed class JsonStateStore
             await using var stream = File.OpenRead(_settingsFilePath);
             var loaded = await JsonSerializer.DeserializeAsync<AppSettings>(stream, JsonOptions, cancellationToken)
                 .ConfigureAwait(false) ?? new AppSettings();
+            bool migrated = loaded.ApplyMigrations();
             loaded.Normalize();
+            if (migrated)
+            {
+                await WriteAtomicJsonNoLockAsync(_settingsFilePath, loaded, cancellationToken).ConfigureAwait(false);
+            }
             return loaded;
         }
         catch
         {
-            var fallback = new AppSettings();
+            var fallback = new AppSettings
+            {
+                SettingsSchemaVersion = AppSettings.CurrentSchemaVersion
+            };
             fallback.Normalize();
             return fallback;
         }
@@ -67,6 +78,7 @@ public sealed class JsonStateStore
 
     public async Task SaveSettingsAsync(AppSettings settings, CancellationToken cancellationToken = default)
     {
+        settings.SettingsSchemaVersion = AppSettings.CurrentSchemaVersion;
         settings.Normalize();
         await WriteAtomicJsonAsync(_settingsFilePath, settings, cancellationToken).ConfigureAwait(false);
     }
@@ -158,24 +170,29 @@ public sealed class JsonStateStore
         await _ioLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            var dir = Path.GetDirectoryName(targetPath);
-            if (!string.IsNullOrEmpty(dir))
-            {
-                Directory.CreateDirectory(dir);
-            }
-
-            var tempPath = $"{targetPath}.{Guid.NewGuid():N}.tmp";
-            await using (var stream = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None, 65536, useAsync: true))
-            {
-                await JsonSerializer.SerializeAsync(stream, value, JsonOptions, cancellationToken).ConfigureAwait(false);
-                await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
-            }
-
-            File.Move(tempPath, targetPath, overwrite: true);
+            await WriteAtomicJsonNoLockAsync(targetPath, value, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
             _ioLock.Release();
         }
+    }
+
+    private static async Task WriteAtomicJsonNoLockAsync<T>(string targetPath, T value, CancellationToken cancellationToken)
+    {
+        var dir = Path.GetDirectoryName(targetPath);
+        if (!string.IsNullOrEmpty(dir))
+        {
+            Directory.CreateDirectory(dir);
+        }
+
+        var tempPath = $"{targetPath}.{Guid.NewGuid():N}.tmp";
+        await using (var stream = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None, 65536, useAsync: true))
+        {
+            await JsonSerializer.SerializeAsync(stream, value, JsonOptions, cancellationToken).ConfigureAwait(false);
+            await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        File.Move(tempPath, targetPath, overwrite: true);
     }
 }

@@ -17,6 +17,7 @@ public sealed class BrowserBridgeServer : IAsyncDisposable
     private int _port;
 
     public event Action<BridgeCommand>? CommandReceived;
+    public Func<BridgeCommand, object?>? CommandResponder { get; set; }
 
     public bool IsRunning => _listener != null;
     public int Port => _port;
@@ -168,8 +169,10 @@ public sealed class BrowserBridgeServer : IAsyncDisposable
                     return;
                 }
 
+                object? ack = CommandResponder?.Invoke(cmd);
                 CommandReceived?.Invoke(cmd);
-                await WriteJsonResponseAsync(stream, "200 OK", "{\"ok\":true}", ct).ConfigureAwait(false);
+                string ackJson = ack != null ? JsonSerializer.Serialize(ack) : "{\"ok\":true}";
+                await WriteJsonResponseAsync(stream, "200 OK", ackJson, ct).ConfigureAwait(false);
                 return;
             }
 

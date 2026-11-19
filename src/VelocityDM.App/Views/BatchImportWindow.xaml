@@ -75,7 +75,7 @@
                     Style="{StaticResource ToolbarButtonStyle}"
                     Click="Browse_Click" />
             <StackPanel Grid.Column="3">
-                <TextBlock x:Name="ConnLabel" Text="Connections: 8" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" Margin="0,0,0,4" />
+                <TextBlock x:Name="ConnLabel" Text="Connections: 32" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" Margin="0,0,0,4" />
                 <Slider x:Name="ConnectionsSlider"
                         Minimum="1"
                         Maximum="32"

@@ -103,8 +103,18 @@ public static class Program
             }
 
             bool sent = await Task.Run(() => EnsurePrimaryAndSendCommand(command)).ConfigureAwait(false);
+            object responsePayload;
+            if (sent)
+            {
+                var settings = await new JsonStateStore().LoadSettingsAsync().ConfigureAwait(false);
+                responsePayload = BridgeAckFactory.Build(command, settings, ok: true);
+            }
+            else
+            {
+                responsePayload = new { ok = false };
+            }
 
-            await WriteNativeResponseAsync(stdout, new { ok = sent }).ConfigureAwait(false);
+            await WriteNativeResponseAsync(stdout, responsePayload).ConfigureAwait(false);
             return 0;
         }
         catch (Exception ex)

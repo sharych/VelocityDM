@@ -21,7 +21,7 @@ public partial class BatchImportWindow : Window
 
     public IReadOnlyList<string> SelectedUrls { get; private set; } = Array.Empty<string>();
     public string? CustomDirectory { get; private set; }
-    public int Connections { get; private set; } = 8;
+    public int Connections { get; private set; } = 32;
     public bool StartImmediately { get; private set; } = true;
 
     public BatchImportWindow() : this(new DownloadManagerService())

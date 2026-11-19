@@ -3,6 +3,7 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using VelocityDM.Core.Models;
+using VelocityDM.Core.Services;
 using VelocityDM.Mac.Helpers;
 
 namespace VelocityDM.Mac.Views;
@@ -62,6 +63,27 @@ public partial class SettingsWindow : Window
         if (folders.Count > 0 && folders[0].Path.LocalPath is { Length: > 0 } localPath)
         {
             DefaultFolderTextBox.Text = localPath;
+        }
+    }
+
+    private void CreateHierarchy_Click(object? sender, RoutedEventArgs e)
+    {
+        string folder = (DefaultFolderTextBox.Text ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(folder))
+        {
+            ValidationErrorText.Text = "Please choose a download folder first.";
+            return;
+        }
+
+        try
+        {
+            FileCategoryClassifier.CreateCategoryHierarchy(folder);
+            CategorizeCheckBox.IsChecked = true;
+            ValidationErrorText.Text = $"Created category folders (Programs, Compressed, Video, Music, Documents, Images, Other, Torrents) in {folder}";
+        }
+        catch (Exception ex)
+        {
+            ValidationErrorText.Text = $"Could not create category folders: {ex.Message}";
         }
     }
 

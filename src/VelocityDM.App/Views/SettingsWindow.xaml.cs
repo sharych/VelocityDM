@@ -3,6 +3,7 @@ using System.Windows;
 using Microsoft.Win32;
 using VelocityDM.App.Helpers;
 using VelocityDM.Core.Models;
+using VelocityDM.Core.Services;
 
 namespace VelocityDM.App.Views;
 
@@ -64,6 +65,32 @@ public partial class SettingsWindow : Window
         if (dialog.ShowDialog(this) == true)
         {
             DefaultFolderTextBox.Text = dialog.FolderName;
+        }
+    }
+
+    private void CreateHierarchy_Click(object sender, RoutedEventArgs e)
+    {
+        string folder = DefaultFolderTextBox.Text.Trim();
+        if (string.IsNullOrWhiteSpace(folder))
+        {
+            MessageBox.Show(this, "Please select a download folder first.", "VelocityDM", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        try
+        {
+            FileCategoryClassifier.CreateCategoryHierarchy(folder);
+            CategorizeCheckBox.IsChecked = true;
+            MessageBox.Show(
+                this,
+                $"Created category subfolders (Programs, Compressed, Video, Music, Documents, Images, Other, Torrents) inside:\n{folder}",
+                "Category Hierarchy Created",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, $"Could not create category folders:\n{ex.Message}", "VelocityDM", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 

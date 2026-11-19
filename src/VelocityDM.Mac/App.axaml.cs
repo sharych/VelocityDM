@@ -90,7 +90,12 @@ public partial class App : Application
                 _ipc.StartListening();
             }
 
-            _bridgeServer = new BrowserBridgeServer();
+            _bridgeServer = new BrowserBridgeServer
+            {
+                CommandResponder = cmd => _downloadManager != null
+                    ? BridgeAckFactory.Build(cmd, _downloadManager.Settings)
+                    : new { ok = true, app = "VelocityDM" }
+            };
             _bridgeServer.CommandReceived += DispatchExternalCommand;
 
             await _mainViewModel.InitializeAsync();
@@ -278,13 +283,13 @@ public partial class App : Application
             if (_isExiting)
                 return;
 
-            _mainWindow.RestoreFromTray();
             await _mainWindow.ShowAddUrlDialogAsync(
                 prefillUrl: url,
                 customFileName: string.IsNullOrWhiteSpace(cmd.Filename) ? null : cmd.Filename,
                 referrer: cmd.Referrer,
                 cookies: cmd.Cookies,
-                userAgent: cmd.UserAgent);
+                userAgent: cmd.UserAgent,
+                bringToFront: true);
         }
         catch (OperationCanceledException)
         {

@@ -151,4 +151,77 @@ public sealed class UnitTests
         Assert.Equal(2, guard.PendingPopupCount);
         Assert.True(guard.TryAcquirePopupSlot());
     }
+
+    [Fact]
+    public async Task AppSettings_DefaultsTo32ConnectionsAndMigratesLegacyEightConnectionDefault()
+    {
+        var fresh = new AppSettings();
+        Assert.Equal(32, fresh.DefaultConnectionsPerDownload);
+        Assert.True(fresh.RememberCustomDownloadLocation);
+
+        var tempDir = Path.Combine(Path.GetTempPath(), "vdm_cfg_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            // Legacy v1 settings file with default 8 and no SettingsSchemaVersion
+            string legacyPath = Path.Combine(tempDir, "settings.json");
+            await File.WriteAllTextAsync(legacyPath, """
+                {
+                  "DefaultConnectionsPerDownload": 8,
+                  "CategorizeIntoSubfolders": true
+                }
+                """);
+
+            var store = new JsonStateStore(tempDir);
+            var migrated = await store.LoadSettingsAsync();
+            Assert.Equal(32, migrated.DefaultConnectionsPerDownload);
+            Assert.Equal(AppSettings.CurrentSchemaVersion, migrated.SettingsSchemaVersion);
+
+            // User-customized connection count (e.g. 16) must stay untouched on migration
+            await File.WriteAllTextAsync(legacyPath, """
+                {
+                  "DefaultConnectionsPerDownload": 16,
+                  "CategorizeIntoSubfolders": false
+                }
+                """);
+            var custom = await store.LoadSettingsAsync();
+            Assert.Equal(16, custom.DefaultConnectionsPerDownload);
+        }
+        finally
+        {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void FileCategoryClassifier_CreateCategoryHierarchyCreatesAllSubfoldersAndResolvesDestination()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), "vdm_hier_" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var folders = FileCategoryClassifier.CreateCategoryHierarchy(tempDir);
+            string[] expected = ["Programs", "Compressed", "Video", "Music", "Documents", "Images", "Other", "Torrents"];
+            foreach (var name in expected)
+            {
+                string sub = Path.Combine(tempDir, name);
+                Assert.True(Directory.Exists(sub), $"Missing expected folder: {sub}");
+                Assert.Contains(sub, folders);
+            }
+
+            var settings = new AppSettings
+            {
+                DefaultDownloadDirectory = tempDir,
+                CategorizeIntoSubfolders = true
+            };
+            var dest = FileCategoryClassifier.ResolveSuggestedDestination(settings, "https://cdn.example.com/movie.mp4");
+            Assert.Equal("movie.mp4", dest.FileName);
+            Assert.Equal(FileCategory.Video, dest.Category);
+            Assert.Equal(Path.Combine(tempDir, "Video"), dest.SaveDirectory);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, recursive: true);
+        }
+    }
 }

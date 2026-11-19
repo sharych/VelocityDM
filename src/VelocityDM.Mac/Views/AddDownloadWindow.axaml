@@ -3,7 +3,7 @@
         x:Class="VelocityDM.Mac.Views.AddDownloadWindow"
         Title="Add New Download"
         Icon="avares://VelocityDM/Assets/VelocityDM.png"
-        Width="600"
+        Width="620"
         SizeToContent="Height"
         WindowStartupLocation="CenterOwner"
         CanResize="False"
@@ -49,12 +49,28 @@
         <StackPanel Grid.Row="4" Margin="0,0,0,12">
             <TextBlock Text="Save To Folder" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" Margin="0,0,0,5" />
             <Grid ColumnDefinitions="*,Auto">
-                <TextBox x:Name="SaveDirTextBox" />
+                <TextBox x:Name="SaveDirTextBox" TextChanged="SaveDirTextBox_TextChanged" />
                 <Button Grid.Column="1"
                         Content="Browse..."
                         Margin="8,0,0,0"
                         Classes="toolbar"
                         Click="BrowseFolder_Click" />
+            </Grid>
+            <Grid ColumnDefinitions="*,Auto" Margin="0,8,0,0">
+                <StackPanel Grid.Column="0" Spacing="4">
+                    <CheckBox x:Name="RememberLocationCheckBox"
+                              Content="Save / remember this location for future downloads" />
+                    <CheckBox x:Name="CreateHierarchyCheckBox"
+                              Content="Create &amp; organize category folders (Video, Compressed, Programs...)"
+                              IsCheckedChanged="CreateHierarchyCheckBox_Changed" />
+                </StackPanel>
+                <Button x:Name="CreateHierarchyButton"
+                        Grid.Column="1"
+                        Content="Create Folders Now"
+                        VerticalAlignment="Center"
+                        Margin="8,0,0,0"
+                        Classes="toolbar"
+                        Click="CreateHierarchy_Click" />
             </Grid>
         </StackPanel>
 
@@ -62,7 +78,7 @@
             <Grid Margin="0,0,0,4">
                 <TextBlock Text="Parallel Segment Connections" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" />
                 <TextBlock x:Name="ConnectionsValueText"
-                           Text="8 parallel connections"
+                           Text="32 parallel connections"
                            HorizontalAlignment="Right"
                            Foreground="{StaticResource AccentCyanBrush}"
                            FontWeight="SemiBold"

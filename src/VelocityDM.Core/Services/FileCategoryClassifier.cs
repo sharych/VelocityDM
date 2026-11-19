@@ -125,6 +125,57 @@ public static partial class FileCategoryClassifier
             : baseDirectory;
     }
 
+    /// <summary>
+    /// Creates the base folder and all standard VelocityDM category subfolders inside it.
+    /// </summary>
+    public static IReadOnlyList<string> CreateCategoryHierarchy(string baseDirectory)
+    {
+        if (string.IsNullOrWhiteSpace(baseDirectory))
+            throw new ArgumentException("Base directory cannot be empty.", nameof(baseDirectory));
+
+        string root = baseDirectory.Trim();
+        Directory.CreateDirectory(root);
+
+        var created = new List<string>();
+        foreach (FileCategory category in Enum.GetValues<FileCategory>())
+        {
+            string sub = Path.Combine(root, GetCategorySubfolder(category));
+            Directory.CreateDirectory(sub);
+            created.Add(sub);
+        }
+
+        string torrentsDir = Path.Combine(root, "Torrents");
+        Directory.CreateDirectory(torrentsDir);
+        created.Add(torrentsDir);
+
+        return created;
+    }
+
+    public static (string FileName, FileCategory Category, string SaveDirectory) ResolveSuggestedDestination(
+        AppSettings settings,
+        string url,
+        string? customFileName = null)
+    {
+        string name = string.IsNullOrWhiteSpace(customFileName) ? string.Empty : SanitizeFileName(customFileName);
+        if (string.IsNullOrWhiteSpace(name) && Uri.TryCreate(url.Trim(), UriKind.Absolute, out var uri))
+        {
+            string seg = Path.GetFileName(uri.AbsolutePath);
+            if (!string.IsNullOrWhiteSpace(seg) && seg != "/")
+            {
+                name = SanitizeFileName(Uri.UnescapeDataString(seg));
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            name = "download.bin";
+        }
+
+        FileCategory category = Classify(name);
+        string saveDir = ResolveSaveDirectory(settings.DefaultDownloadDirectory, category, settings.CategorizeIntoSubfolders);
+        return (name, category, saveDir);
+    }
+
     public static string SanitizeFileName(string? rawName, string fallback = "download.bin")
     {
         var name = (rawName ?? string.Empty).Trim();

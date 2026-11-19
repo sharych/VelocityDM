@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Add New Download"
         Icon="pack://application:,,,/VelocityDM;component/Assets/VelocityDM.ico"
-        Width="600"
+        Width="620"
         SizeToContent="Height"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
@@ -72,12 +72,34 @@
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <TextBox x:Name="SaveDirTextBox" />
+                <TextBox x:Name="SaveDirTextBox" TextChanged="SaveDirTextBox_TextChanged" />
                 <Button Grid.Column="1"
                         Content="Browse..."
                         Margin="8,0,0,0"
                         Style="{StaticResource ToolbarButtonStyle}"
                         Click="BrowseFolder_Click" />
+            </Grid>
+            <Grid Margin="0,8,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0">
+                    <CheckBox x:Name="RememberLocationCheckBox"
+                              Content="Save / remember this location for future downloads"
+                              Margin="0,0,0,4" />
+                    <CheckBox x:Name="CreateHierarchyCheckBox"
+                              Content="Create &amp; organize category folders (Video, Compressed, Programs...)"
+                              Checked="CreateHierarchyCheckBox_Changed"
+                              Unchecked="CreateHierarchyCheckBox_Changed" />
+                </StackPanel>
+                <Button x:Name="CreateHierarchyButton"
+                        Grid.Column="1"
+                        Content="Create Folders Now"
+                        VerticalAlignment="Center"
+                        Margin="8,0,0,0"
+                        Style="{StaticResource ToolbarButtonStyle}"
+                        Click="CreateHierarchy_Click" />
             </Grid>
         </StackPanel>
 
@@ -85,7 +107,7 @@
             <Grid Margin="0,0,0,4">
                 <TextBlock Text="Parallel Segment Connections" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" />
                 <TextBlock x:Name="ConnectionsValueText"
-                           Text="8 connections"
+                           Text="32 parallel connections"
                            HorizontalAlignment="Right"
                            Foreground="{StaticResource AccentCyanBrush}"
                            FontWeight="SemiBold"

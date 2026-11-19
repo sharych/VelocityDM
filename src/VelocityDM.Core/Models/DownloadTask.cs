@@ -37,7 +37,7 @@ public sealed class DownloadTask
 
     public bool SupportsRanges { get; set; }
 
-    public int MaxConnections { get; set; } = 8;
+    public int MaxConnections { get; set; } = 32;
 
     public DownloadStatus Status { get; set; } = DownloadStatus.Queued;
 

@@ -5,6 +5,10 @@ namespace VelocityDM.Core.Models;
 /// </summary>
 public sealed class AppSettings
 {
+    public const int CurrentSchemaVersion = 2;
+
+    public int SettingsSchemaVersion { get; set; } = 0;
+
     public string DefaultDownloadDirectory { get; set; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
         "Downloads",
@@ -12,7 +16,9 @@ public sealed class AppSettings
 
     public bool CategorizeIntoSubfolders { get; set; } = true;
 
-    public int DefaultConnectionsPerDownload { get; set; } = 8;
+    public bool RememberCustomDownloadLocation { get; set; } = true;
+
+    public int DefaultConnectionsPerDownload { get; set; } = 32;
 
     public int MaxConcurrentDownloads { get; set; } = 3;
 
@@ -59,8 +65,10 @@ public sealed class AppSettings
 
     public AppSettings Clone() => new()
     {
+        SettingsSchemaVersion = SettingsSchemaVersion,
         DefaultDownloadDirectory = DefaultDownloadDirectory,
         CategorizeIntoSubfolders = CategorizeIntoSubfolders,
+        RememberCustomDownloadLocation = RememberCustomDownloadLocation,
         DefaultConnectionsPerDownload = DefaultConnectionsPerDownload,
         MaxConcurrentDownloads = MaxConcurrentDownloads,
         GlobalSpeedLimitBytesPerSec = GlobalSpeedLimitBytesPerSec,
@@ -102,5 +110,23 @@ public sealed class AppSettings
         TorrentDownloadSpeedLimitBytesPerSec = Math.Max(0, TorrentDownloadSpeedLimitBytesPerSec);
         TorrentUploadSpeedLimitBytesPerSec = Math.Max(0, TorrentUploadSpeedLimitBytesPerSec);
         TorrentMaxConnections = Math.Clamp(TorrentMaxConnections, 10, 1000);
+    }
+
+    /// <summary>
+    /// Upgrades legacy defaults (such as v1's 8-connection default) to current defaults (32 connections).
+    /// </summary>
+    public bool ApplyMigrations()
+    {
+        bool changed = false;
+        if (SettingsSchemaVersion < CurrentSchemaVersion)
+        {
+            if (DefaultConnectionsPerDownload == 8)
+            {
+                DefaultConnectionsPerDownload = 32;
+            }
+            SettingsSchemaVersion = CurrentSchemaVersion;
+            changed = true;
+        }
+        return changed;
     }
 }

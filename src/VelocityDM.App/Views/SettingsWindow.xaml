@@ -25,9 +25,11 @@
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <TextBox x:Name="DefaultFolderTextBox" />
                         <Button Grid.Column="1" Content="Browse..." Margin="8,0,0,0" Style="{StaticResource ToolbarButtonStyle}" Click="Browse_Click" />
+                        <Button Grid.Column="2" Content="Create Folders" Margin="8,0,0,0" Style="{StaticResource ToolbarButtonStyle}" Click="CreateHierarchy_Click" />
                     </Grid>
                 </StackPanel>
 

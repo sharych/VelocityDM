@@ -49,19 +49,18 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 
   const settings = await getSettings();
   const cookies = await getCookieHeader(targetUrl);
-  await enqueueDispatch(() =>
-    dispatchToVelocityDM(
-      {
-        action: "download",
-        url: targetUrl,
-        referrer: info.pageUrl || (tab && tab.url) || "",
-        cookies,
-        userAgent: navigator.userAgent,
-        startImmediately: settings.autoStart
-      },
-      settings.bridgePort
-    )
-  );
+  const payload = {
+    action: "download",
+    url: targetUrl,
+    referrer: info.pageUrl || (tab && tab.url) || "",
+    cookies,
+    userAgent: navigator.userAgent,
+    startImmediately: settings.autoStart
+  };
+  const handoff = await enqueueDispatch(() => dispatchToVelocityDM(payload, settings.bridgePort));
+  if (handoff.ok) {
+    await showChromeDownloadPopup(handoff, payload, tab && typeof tab.id === "number" ? tab.id : undefined);
+  }
 });
 
 chrome.downloads.onCreated.addListener(async (downloadItem) => {
@@ -129,14 +128,15 @@ chrome.downloads.onCreated.addListener(async (downloadItem) => {
       startImmediately: settings.autoStart
     };
 
-    const handedOff = await enqueueDispatch(() => dispatchToVelocityDM(payload, settings.bridgePort));
-    if (handedOff) {
+    const handoff = await enqueueDispatch(() => dispatchToVelocityDM(payload, settings.bridgePort));
+    if (handoff.ok) {
       try {
         await chrome.downloads.cancel(downloadItem.id);
         await chrome.downloads.erase({ id: downloadItem.id });
       } catch {
         // Ignore cleanup failures
       }
+      await showChromeDownloadPopup(handoff, payload);
     } else if (pausedByUs) {
       try {
         await chrome.downloads.resume(downloadItem.id);
@@ -164,8 +164,8 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   if (message && message.type === "showApp") {
     getSettings().then(async (settings) => {
-      const ok = await enqueueDispatch(() => dispatchToVelocityDM({ action: "show" }, settings.bridgePort));
-      sendResponse({ ok });
+      const resp = await enqueueDispatch(() => dispatchToVelocityDM({ action: "show" }, settings.bridgePort));
+      sendResponse({ ok: Boolean(resp && resp.ok) });
     });
     return true;
   }
@@ -399,7 +399,9 @@ async function dispatchToVelocityDM(payload, bridgePort) {
     );
     if (res.ok) {
       const data = await res.json().catch(() => ({ ok: true }));
-      if (data && data.ok !== false) return true;
+      if (data && data.ok !== false) {
+        return { ok: true, ...data };
+      }
     }
   } catch {
     // Bridge not listening; fall back to Native Messaging which launches VelocityDM
@@ -407,9 +409,187 @@ async function dispatchToVelocityDM(payload, bridgePort) {
 
   try {
     const nativeResp = await chrome.runtime.sendNativeMessage(NATIVE_HOST_NAME, payload);
-    return Boolean(nativeResp && nativeResp.ok);
+    if (nativeResp && nativeResp.ok) {
+      return { ok: true, ...nativeResp };
+    }
+    return { ok: false };
+  } catch {
+    return { ok: false };
+  }
+}
+
+async function showChromeDownloadPopup(ack, payload, preferredTabId) {
+  const fileName = ack.fileName || payload.filename || extractFileNameFromUrl(payload.url);
+  const saveDirectory = ack.saveDirectory || "VelocityDM Default Folder";
+  const connections = typeof ack.connections === "number" && ack.connections > 0 ? ack.connections : 32;
+  const modeLabel = ack.mode === "started"
+    ? "Downloading by VelocityDM"
+    : "VelocityDM Download Popup";
+
+  const toastInfo = {
+    app: ack.app || "VelocityDM",
+    modeLabel,
+    fileName,
+    saveDirectory,
+    connections
+  };
+
+  const injected = await tryShowInTabToast(toastInfo, preferredTabId);
+  if (injected) return;
+
+  if (chrome.notifications && typeof chrome.notifications.create === "function") {
+    try {
+      const notifId = `velocitydm-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      chrome.notifications.create(notifId, {
+        type: "basic",
+        iconUrl: "icon128.png",
+        title: `${toastInfo.modeLabel} (${toastInfo.connections} connections)`,
+        message: `${toastInfo.fileName}\nSave to: ${toastInfo.saveDirectory}`
+      });
+      setTimeout(() => {
+        try {
+          chrome.notifications.clear(notifId);
+        } catch {
+          // Ignore clear errors
+        }
+      }, 6500);
+    } catch {
+      // Ignore notification errors
+    }
+  }
+}
+
+async function tryShowInTabToast(toastInfo, preferredTabId) {
+  if (!chrome.scripting || typeof chrome.scripting.executeScript !== "function") {
+    return false;
+  }
+
+  try {
+    let targetTabId = typeof preferredTabId === "number" ? preferredTabId : null;
+    if (targetTabId === null && chrome.tabs && typeof chrome.tabs.query === "function") {
+      const tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+      if (Array.isArray(tabs) && tabs.length > 0 && typeof tabs[0].id === "number") {
+        targetTabId = tabs[0].id;
+      }
+    }
+    if (targetTabId === null) return false;
+
+    await chrome.scripting.executeScript({
+      target: { tabId: targetTabId },
+      func: renderVelocityDmChromeToast,
+      args: [toastInfo]
+    });
+    return true;
   } catch {
     return false;
+  }
+}
+
+function renderVelocityDmChromeToast(info) {
+  try {
+    const hostId = "__velocitydm_chrome_toast_host__";
+    let host = document.getElementById(hostId);
+    if (!host) {
+      host = document.createElement("div");
+      host.id = hostId;
+      host.style.cssText = "position:fixed;top:16px;right:16px;z-index:2147483647;pointer-events:none;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;";
+      const shadow = host.attachShadow({ mode: "open" });
+      const style = document.createElement("style");
+      style.textContent = `
+        .vdm-stack { display: flex; flex-direction: column; gap: 10px; max-width: 380px; }
+        .vdm-card {
+          pointer-events: auto;
+          background: #0f172a;
+          color: #f8fafc;
+          border: 1px solid #38bdf8;
+          border-left: 4px solid #38bdf8;
+          border-radius: 10px;
+          box-shadow: 0 14px 34px rgba(2, 6, 23, 0.55);
+          padding: 12px 14px;
+          font-size: 12.5px;
+          line-height: 1.45;
+          animation: vdmSlideIn 0.18s ease-out;
+        }
+        .vdm-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+        .vdm-title { font-weight: 700; color: #38bdf8; font-size: 13px; }
+        .vdm-close {
+          background: transparent; border: none; color: #94a3b8; cursor: pointer;
+          font-size: 15px; line-height: 1; padding: 0 4px;
+        }
+        .vdm-close:hover { color: #f8fafc; }
+        .vdm-file { font-weight: 600; color: #f8fafc; word-break: break-word; margin-bottom: 4px; }
+        .vdm-meta { color: #cbd5e1; font-size: 11.5px; word-break: break-word; }
+        .vdm-by { color: #10b981; font-weight: 600; margin-top: 4px; font-size: 11.5px; }
+        @keyframes vdmSlideIn {
+          from { opacity: 0; transform: translateY(-8px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+      `;
+      const stack = document.createElement("div");
+      stack.className = "vdm-stack";
+      shadow.appendChild(style);
+      shadow.appendChild(stack);
+      (document.body || document.documentElement).appendChild(host);
+    }
+
+    const stack = host.shadowRoot && host.shadowRoot.querySelector(".vdm-stack");
+    if (!stack) return;
+
+    const card = document.createElement("div");
+    card.className = "vdm-card";
+
+    const head = document.createElement("div");
+    head.className = "vdm-head";
+
+    const title = document.createElement("div");
+    title.className = "vdm-title";
+    title.textContent = info.modeLabel || "VelocityDM Download";
+
+    const closeBtn = document.createElement("button");
+    closeBtn.className = "vdm-close";
+    closeBtn.textContent = "×";
+    closeBtn.title = "Dismiss";
+    closeBtn.addEventListener("click", () => card.remove());
+
+    head.appendChild(title);
+    head.appendChild(closeBtn);
+
+    const fileEl = document.createElement("div");
+    fileEl.className = "vdm-file";
+    fileEl.textContent = info.fileName || "Download";
+
+    const pathEl = document.createElement("div");
+    pathEl.className = "vdm-meta";
+    pathEl.textContent = `Save to: ${info.saveDirectory}`;
+
+    const byEl = document.createElement("div");
+    byEl.className = "vdm-by";
+    byEl.textContent = `Handled by ${info.app || "VelocityDM"} • ${info.connections || 32} parallel connections`;
+
+    card.appendChild(head);
+    card.appendChild(fileEl);
+    card.appendChild(pathEl);
+    card.appendChild(byEl);
+    stack.appendChild(card);
+
+    setTimeout(() => {
+      card.remove();
+      if (stack.childElementCount === 0 && host.isConnected) {
+        host.remove();
+      }
+    }, 6000);
+  } catch {
+    // Ignore DOM injection failures
+  }
+}
+
+function extractFileNameFromUrl(url) {
+  try {
+    const parsed = new URL(url);
+    const seg = parsed.pathname.split("/").filter(Boolean).pop();
+    return seg ? decodeURIComponent(seg) : "download";
+  } catch {
+    return "download";
   }
 }
 
