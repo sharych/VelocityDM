@@ -54,13 +54,13 @@ Manage `.torrent` files and `magnet:?` links with DHT, PEX, sequential streaming
 
 Download the latest release from **[GitHub Releases](https://github.com/sharych/VelocityDM/releases)**:
 
-1. **Windows Installer (`VelocityDM-Setup-v2.3.1.exe`)** *(Recommended)*
+1. **Windows Installer (`VelocityDM-Setup-v2.3.2.exe`)** *(Recommended)*
    - Installs cleanly into `%LocalAppData%\Programs\VelocityDM` with Start Menu / Desktop shortcuts and a Windows Apps & Features uninstaller.
    - Includes a setup checkbox to automatically download & install **Microsoft .NET 8.0 Desktop Runtime (x64)** if it is not already present on your PC.
    - Optionally registers Chrome/Edge Native Messaging, Windows startup, and `.torrent` / `magnet:` associations.
-2. **Windows Portable ZIP (`VelocityDM-v2.3.1-win-x64-portable.zip`)**
+2. **Windows Portable ZIP (`VelocityDM-v2.3.2-win-x64-portable.zip`)**
    - Includes the .NET 8 runtime bundled inside — extract and run `VelocityDM.exe` with no installation required.
-3. **macOS DMG (`VelocityDM-v2.3.1-osx-arm64.dmg` / `osx-x64`)**
+3. **macOS DMG (`VelocityDM-v2.3.2-osx-arm64.dmg` / `osx-x64`)**
    - Native macOS Avalonia app (`VelocityDM.app`) with Menu Bar tray mode, Chrome Native Messaging auto-registration, and `Install Chrome Integration.command`.
 
 ### Verifying Checksums & Security

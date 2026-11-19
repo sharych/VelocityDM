@@ -50,9 +50,14 @@ public sealed class JsonStateStore
                 return defaults;
             }
 
-            await using var stream = File.OpenRead(_settingsFilePath);
-            var loaded = await JsonSerializer.DeserializeAsync<AppSettings>(stream, JsonOptions, cancellationToken)
-                .ConfigureAwait(false) ?? new AppSettings();
+            AppSettings loaded;
+            // Close the read handle before WriteAtomicJsonNoLockAsync runs File.Move on Windows.
+            await using (var stream = File.OpenRead(_settingsFilePath))
+            {
+                loaded = await JsonSerializer.DeserializeAsync<AppSettings>(stream, JsonOptions, cancellationToken)
+                    .ConfigureAwait(false) ?? new AppSettings();
+            }
+
             bool migrated = loaded.ApplyMigrations();
             loaded.Normalize();
             if (migrated)
