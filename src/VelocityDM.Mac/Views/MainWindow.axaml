@@ -19,19 +19,20 @@
             <DockPanel LastChildFill="True">
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Spacing="8">
                     <TextBlock Text="Filter:" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" />
-                    <TextBox Width="200" Text="{Binding SearchQuery}" Watermark="Search downloads..." />
+                    <TextBox Width="175" Text="{Binding SearchQuery}" Watermark="Search downloads..." />
                 </StackPanel>
 
                 <StackPanel Orientation="Horizontal" Spacing="6">
                     <Button Content="+ Add URL" Classes="primary" Click="AddUrl_Click" />
-                    <Button Content="Batch Import" Classes="toolbar" Margin="0,0,6,0" Click="BatchImport_Click" />
+                    <Button Content="Batch Import" Classes="toolbar" Margin="0,0,4,0" Click="BatchImport_Click" />
                     <Button Content="▶ Resume" Classes="toolbar" Click="ResumeSelected_Click" />
-                    <Button Content="⏸ Pause" Classes="toolbar" Margin="0,0,6,0" Click="PauseSelected_Click" />
+                    <Button Content="⏸ Pause" Classes="toolbar" Margin="0,0,4,0" Click="PauseSelected_Click" />
                     <Button Content="Resume All" Classes="toolbar" Click="ResumeAll_Click" />
-                    <Button Content="Pause All" Classes="toolbar" Margin="0,0,6,0" Click="PauseAll_Click" />
-                    <Button Content="Remove" Classes="danger" Margin="0,0,6,0" Click="RemoveKeepFile_Click" />
-                    <Button Content="Delete File" Classes="danger" Margin="0,0,6,0" Click="RemoveDeleteFile_Click" />
+                    <Button Content="Pause All" Classes="toolbar" Margin="0,0,4,0" Click="PauseAll_Click" />
+                    <Button Content="Remove" Classes="danger" Margin="0,0,4,0" Click="RemoveKeepFile_Click" />
+                    <Button Content="Delete File" Classes="danger" Margin="0,0,4,0" Click="RemoveDeleteFile_Click" />
                     <Button Content="Chrome Ext" Classes="toolbar" Click="ChromeExtension_Click" />
+                    <Button x:Name="UpdatesButton" Content="Updates" Classes="toolbar" Click="Updates_Click" />
                     <Button Content="⚙ Settings" Classes="toolbar" Click="Settings_Click" />
                 </StackPanel>
             </DockPanel>

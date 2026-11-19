@@ -5,6 +5,7 @@ using System.Windows.Input;
 using VelocityDM.App.Helpers;
 using VelocityDM.App.ViewModels;
 using VelocityDM.Core.Models;
+using VelocityDM.Core.Services;
 
 namespace VelocityDM.App.Views;
 
@@ -12,6 +13,9 @@ public partial class MainWindow : Window
 {
     private readonly MainViewModel _viewModel;
     private readonly ClipboardMonitor _clipboardMonitor;
+    private GitHubUpdateService? _updateService;
+    private Action? _initiateRestartExit;
+    private bool _isUpdateDialogOpen;
 
     public bool AllowExplicitClose { get; set; }
 
@@ -53,6 +57,63 @@ public partial class MainWindow : Window
         };
 
         Closed += (_, _) => _clipboardMonitor.Dispose();
+    }
+
+    public void ConfigureUpdater(GitHubUpdateService updateService, Action initiateRestartExit)
+    {
+        _updateService = updateService;
+        _initiateRestartExit = initiateRestartExit;
+    }
+
+    public void SetAvailableUpdateBadge(GitHubReleaseInfo? release)
+    {
+        if (release != null)
+        {
+            UpdatesButton.Content = $"Update {release.TagName}";
+            if (TryFindResource("PrimaryButtonStyle") is Style primaryStyle)
+                UpdatesButton.Style = primaryStyle;
+        }
+        else
+        {
+            UpdatesButton.Content = "Updates";
+            if (TryFindResource("ToolbarButtonStyle") is Style toolbarStyle)
+                UpdatesButton.Style = toolbarStyle;
+        }
+    }
+
+    public void ShowUpdateDialog(
+        UpdateCheckResult? preloadedResult = null,
+        bool bringToFront = false,
+        Window? ownerOverride = null)
+    {
+        if (_isUpdateDialogOpen)
+            return;
+
+        _isUpdateDialogOpen = true;
+        try
+        {
+            var service = _updateService ??= new GitHubUpdateService();
+            Action exitAction = _initiateRestartExit ?? Close;
+            var dialog = new UpdateWindow(service, _viewModel.Manager, exitAction, preloadedResult, bringToFront);
+
+            Window? effectiveOwner = ownerOverride ?? (IsVisible ? this : null);
+            if (effectiveOwner != null)
+            {
+                dialog.Owner = effectiveOwner;
+                dialog.WindowStartupLocation = WindowStartupLocation.CenterOwner;
+                dialog.ShowDialog();
+            }
+            else
+            {
+                dialog.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+                dialog.ShowInTaskbar = true;
+                dialog.ShowDialog();
+            }
+        }
+        finally
+        {
+            _isUpdateDialogOpen = false;
+        }
     }
 
     private void SyncSidebarSelection()
@@ -290,9 +351,20 @@ public partial class MainWindow : Window
         dialog.ShowDialog();
     }
 
+    private void Updates_Click(object sender, RoutedEventArgs e)
+    {
+        ShowUpdateDialog();
+    }
+
     private async void Settings_Click(object sender, RoutedEventArgs e)
     {
-        var dialog = new SettingsWindow(_viewModel.Manager.Settings) { Owner = this };
+        SettingsWindow? dialog = null;
+        dialog = new SettingsWindow(
+            _viewModel.Manager.Settings,
+            openUpdatesAction: () => ShowUpdateDialog(ownerOverride: dialog))
+        {
+            Owner = this
+        };
         if (dialog.ShowDialog() == true && dialog.UpdatedSettings != null)
         {
             await _viewModel.Manager.UpdateSettingsAsync(dialog.UpdatedSettings);

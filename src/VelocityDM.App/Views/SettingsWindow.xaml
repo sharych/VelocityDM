@@ -127,7 +127,30 @@
                         <TextBox x:Name="TorrentMaxConnTextBox" />
                     </StackPanel>
                 </Grid>
-                <CheckBox x:Name="StopSeedingCheckBox" Content="Stop seeding automatically once torrent reaches 100%" Margin="0,0,0,10" />
+                <CheckBox x:Name="StopSeedingCheckBox" Content="Stop seeding automatically once torrent reaches 100%" Margin="0,0,0,14" />
+
+                <!-- Auto-Updater -->
+                <TextBlock Text="UPDATES" Foreground="{StaticResource AccentCyanBrush}" FontWeight="Bold" FontSize="11" Margin="0,4,0,8" />
+                <Grid Margin="0,0,0,10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0">
+                        <CheckBox x:Name="AutoCheckUpdatesCheckBox"
+                                  Content="Automatically check GitHub for updates and show a popup when available"
+                                  Margin="0,0,0,6" />
+                        <TextBlock x:Name="CurrentVersionText"
+                                   Foreground="{StaticResource TextSecondaryBrush}"
+                                   FontSize="12" />
+                    </StackPanel>
+                    <Button x:Name="CheckUpdatesButton"
+                            Grid.Column="1"
+                            Content="Check for Updates..."
+                            VerticalAlignment="Center"
+                            Style="{StaticResource ToolbarButtonStyle}"
+                            Click="CheckUpdates_Click" />
+                </Grid>
             </StackPanel>
         </ScrollViewer>
 

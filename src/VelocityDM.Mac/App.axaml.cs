@@ -27,6 +27,7 @@ public partial class App : Application
     private BrowserBridgeServer? _bridgeServer;
     private TrayIcon? _trayIcon;
     private DispatcherTimer? _trayTooltipTimer;
+    private readonly GitHubUpdateService _updateService = new();
 
     private readonly ExternalDownloadBurstGuard _externalBurstGuard = new();
     private readonly SemaphoreSlim _externalPopupGate = new(1, 1);
@@ -81,6 +82,7 @@ public partial class App : Application
             _downloadManager = new DownloadManagerService(store);
             _mainViewModel = new MacMainViewModel(_downloadManager);
             _mainWindow = new MainWindow(_mainViewModel);
+            _mainWindow.ConfigureUpdater(_updateService, ExplicitExit);
 
             SetupTrayIcon();
 
@@ -126,6 +128,19 @@ public partial class App : Application
             _trayTooltipTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
             _trayTooltipTimer.Tick += (_, _) => UpdateTrayTooltip();
             _trayTooltipTimer.Start();
+
+            if (string.IsNullOrWhiteSpace(_dataDirOverride))
+            {
+                _ = _updateService.MonitorForUpdatesAsync(
+                    () => _downloadManager.Settings,
+                    result => Dispatcher.UIThread.Post(async () =>
+                    {
+                        if (_isExiting || _mainWindow == null) return;
+                        _mainWindow.SetAvailableUpdateBadge(result.Release);
+                        await _mainWindow.ShowUpdateDialogAsync(result, bringToFront: true);
+                    }),
+                    _exitCts.Token);
+            }
         }
         catch (Exception ex)
         {
@@ -179,6 +194,14 @@ public partial class App : Application
             await _mainWindow.ShowChromeExtensionDialogAsync();
         });
 
+        var updatesItem = new NativeMenuItem("Check for Updates...");
+        updatesItem.Click += (_, _) => Dispatcher.UIThread.Post(async () =>
+        {
+            if (_mainWindow == null) return;
+            _mainWindow.RestoreFromTray();
+            await _mainWindow.ShowUpdateDialogAsync();
+        });
+
         var exitItem = new NativeMenuItem("Exit VelocityDM");
         exitItem.Click += (_, _) => Dispatcher.UIThread.Post(ExplicitExit);
 
@@ -191,6 +214,7 @@ public partial class App : Application
         menu.Items.Add(pauseAllItem);
         menu.Items.Add(new NativeMenuItemSeparator());
         menu.Items.Add(chromeExtItem);
+        menu.Items.Add(updatesItem);
         menu.Items.Add(new NativeMenuItemSeparator());
         menu.Items.Add(exitItem);
 
@@ -338,6 +362,7 @@ public partial class App : Application
         _trayTooltipTimer?.Stop();
         _trayIcon?.Dispose();
         _bridgeServer?.Stop();
+        _updateService.Dispose();
 
         if (_downloadManager != null)
         {

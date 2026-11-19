@@ -65,6 +65,11 @@
                             Style="{StaticResource ToolbarButtonStyle}"
                             Margin="0,0,6,0"
                             Click="ChromeExtension_Click" />
+                    <Button x:Name="UpdatesButton"
+                            Content="Updates"
+                            Style="{StaticResource ToolbarButtonStyle}"
+                            Margin="0,0,6,0"
+                            Click="Updates_Click" />
                     <Button Content="⚙ Settings"
                             Style="{StaticResource ToolbarButtonStyle}"
                             Click="Settings_Click" />
@@ -75,7 +80,7 @@
                                Foreground="{StaticResource TextSecondaryBrush}"
                                VerticalAlignment="Center"
                                Margin="0,0,8,0" />
-                    <TextBox Width="200"
+                    <TextBox Width="175"
                              Text="{Binding SearchQuery, UpdateSourceTrigger=PropertyChanged}"
                              ToolTip="Search downloads or torrents" />
                 </StackPanel>

@@ -2,6 +2,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using VelocityDM.Core.Models;
+using VelocityDM.Core.Services;
 using VelocityDM.Mac.Helpers;
 using VelocityDM.Mac.ViewModels;
 
@@ -10,6 +11,9 @@ namespace VelocityDM.Mac.Views;
 public partial class MainWindow : Window
 {
     private readonly MacMainViewModel _viewModel;
+    private GitHubUpdateService? _updateService;
+    private Action? _initiateRestartExit;
+    private bool _isUpdateDialogOpen;
 
     public bool AllowExplicitClose { get; set; }
 
@@ -22,6 +26,30 @@ public partial class MainWindow : Window
         InitializeComponent();
         _viewModel = viewModel;
         DataContext = _viewModel;
+    }
+
+    public void ConfigureUpdater(GitHubUpdateService updateService, Action initiateRestartExit)
+    {
+        _updateService = updateService;
+        _initiateRestartExit = initiateRestartExit;
+    }
+
+    public void SetAvailableUpdateBadge(GitHubReleaseInfo? release)
+    {
+        if (release != null)
+        {
+            UpdatesButton.Content = $"Update {release.TagName}";
+            UpdatesButton.Classes.Remove("toolbar");
+            if (!UpdatesButton.Classes.Contains("primary"))
+                UpdatesButton.Classes.Add("primary");
+        }
+        else
+        {
+            UpdatesButton.Content = "Updates";
+            UpdatesButton.Classes.Remove("primary");
+            if (!UpdatesButton.Classes.Contains("toolbar"))
+                UpdatesButton.Classes.Add("toolbar");
+        }
     }
 
     protected override void OnClosing(WindowClosingEventArgs e)
@@ -91,6 +119,42 @@ public partial class MainWindow : Window
     {
         var dialog = new ChromeExtensionWindow();
         await ShowOwnedDialogAsync(dialog);
+    }
+
+    public async Task ShowUpdateDialogAsync(
+        UpdateCheckResult? preloadedResult = null,
+        bool bringToFront = false,
+        Window? ownerOverride = null)
+    {
+        if (_isUpdateDialogOpen)
+            return;
+
+        _isUpdateDialogOpen = true;
+        try
+        {
+            var service = _updateService ??= new GitHubUpdateService();
+            Action exitAction = _initiateRestartExit ?? (() => Close());
+            var dialog = new UpdateWindow(service, _viewModel.Manager, exitAction, preloadedResult, bringToFront);
+
+            Window? effectiveOwner = ownerOverride ?? (IsVisible ? this : null);
+            if (effectiveOwner != null)
+            {
+                dialog.WindowStartupLocation = WindowStartupLocation.CenterOwner;
+                await dialog.ShowDialog(effectiveOwner);
+            }
+            else
+            {
+                dialog.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+                var tcs = new TaskCompletionSource();
+                dialog.Closed += (_, _) => tcs.TrySetResult();
+                dialog.Show();
+                await tcs.Task;
+            }
+        }
+        finally
+        {
+            _isUpdateDialogOpen = false;
+        }
     }
 
     private Task<bool> ShowOwnedDialogAsync(Window dialog)
@@ -165,9 +229,15 @@ public partial class MainWindow : Window
     private async void ChromeExtension_Click(object? sender, RoutedEventArgs e) =>
         await ShowChromeExtensionDialogAsync();
 
+    private async void Updates_Click(object? sender, RoutedEventArgs e) =>
+        await ShowUpdateDialogAsync();
+
     private async void Settings_Click(object? sender, RoutedEventArgs e)
     {
-        var dialog = new SettingsWindow(_viewModel.Manager.Settings);
+        SettingsWindow? dialog = null;
+        dialog = new SettingsWindow(
+            _viewModel.Manager.Settings,
+            openUpdatesAction: () => _ = ShowUpdateDialogAsync(ownerOverride: dialog));
         if (await ShowOwnedDialogAsync(dialog) && dialog.UpdatedSettings != null)
         {
             await _viewModel.Manager.UpdateSettingsAsync(dialog.UpdatedSettings);

@@ -23,6 +23,7 @@ public partial class App : Application
     private TrayIconService? _trayIcon;
     private BrowserBridgeServer? _bridgeServer;
     private DispatcherTimer? _trayTooltipTimer;
+    private readonly GitHubUpdateService _updateService = new();
 
     private readonly ExternalDownloadBurstGuard _externalBurstGuard = new();
     private readonly SemaphoreSlim _externalPopupGate = new(1, 1);
@@ -59,6 +60,7 @@ public partial class App : Application
             _torrentManager = new TorrentManagerService(store, useEphemeralPorts: !string.IsNullOrWhiteSpace(_dataDirOverride));
             _mainViewModel = new MainViewModel(_downloadManager, _torrentManager);
             _mainWindow = new MainWindow(_mainViewModel);
+            _mainWindow.ConfigureUpdater(_updateService, ExplicitExit);
             MainWindow = _mainWindow;
 
             SetupTrayIcon();
@@ -112,6 +114,23 @@ public partial class App : Application
             _trayTooltipTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
             _trayTooltipTimer.Tick += (_, _) => UpdateTrayTooltip();
             _trayTooltipTimer.Start();
+
+            if (string.IsNullOrWhiteSpace(_dataDirOverride))
+            {
+                _ = _updateService.MonitorForUpdatesAsync(
+                    () => _downloadManager.Settings,
+                    result => Dispatcher.BeginInvoke(() =>
+                    {
+                        if (_isExiting || _mainWindow == null) return;
+                        _mainWindow.SetAvailableUpdateBadge(result.Release);
+                        if (!_mainWindow.IsVisible && result.Release != null)
+                        {
+                            _trayIcon?.ShowBalloon("VelocityDM Update Available", $"Version {result.Release.TagName} is ready to install.");
+                        }
+                        _mainWindow.ShowUpdateDialog(result, bringToFront: true);
+                    }),
+                    _exitCts.Token);
+            }
         }
         catch (Exception ex)
         {
@@ -142,6 +161,12 @@ public partial class App : Application
         _trayIcon.PauseAllRequested += () => Dispatcher.BeginInvoke(async () =>
         {
             if (_downloadManager != null) await _downloadManager.PauseAllAsync();
+        });
+        _trayIcon.CheckUpdatesRequested += () => Dispatcher.BeginInvoke(() =>
+        {
+            if (_mainWindow == null) return;
+            _mainWindow.RestoreFromTray();
+            _mainWindow.ShowUpdateDialog();
         });
         _trayIcon.ClipboardToggleRequested += enabled => Dispatcher.BeginInvoke(() =>
         {
@@ -289,6 +314,7 @@ public partial class App : Application
         _trayTooltipTimer?.Stop();
         _trayIcon?.Dispose();
         _bridgeServer?.Stop();
+        _updateService.Dispose();
 
         if (_torrentManager != null)
         {

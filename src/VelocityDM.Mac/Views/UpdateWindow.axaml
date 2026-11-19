@@ -1,0 +1,122 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="VelocityDM.Mac.Views.UpdateWindow"
+        Title="VelocityDM Auto-Updater"
+        Icon="avares://VelocityDM/Assets/VelocityDM.png"
+        Width="600"
+        Height="510"
+        MinWidth="540"
+        MinHeight="460"
+        WindowStartupLocation="CenterScreen"
+        CanResize="False"
+        Background="{StaticResource BgWindowBrush}">
+    <Grid Margin="22" RowDefinitions="Auto,Auto,Auto,*,Auto,Auto">
+        <StackPanel Spacing="4">
+            <TextBlock x:Name="HeadlineText"
+                       Text="Checking GitHub Releases..."
+                       FontSize="18"
+                       FontWeight="Bold" />
+            <TextBlock x:Name="SubheadlineText"
+                       Foreground="{StaticResource TextSecondaryBrush}"
+                       FontSize="12"
+                       TextWrapping="Wrap" />
+        </StackPanel>
+
+        <Border Grid.Row="1"
+                Background="{StaticResource BgSurfaceBrush}"
+                BorderBrush="{StaticResource BorderBrushSubtle}"
+                BorderThickness="1"
+                CornerRadius="6"
+                Padding="14"
+                Margin="0,14,0,10">
+            <StackPanel Spacing="4">
+                <TextBlock x:Name="PackageTitleText"
+                           Text="Target Package"
+                           FontWeight="SemiBold"
+                           Foreground="{StaticResource AccentCyanBrush}" />
+                <TextBlock x:Name="PackageDetailsText"
+                           Text="Querying latest release from github.com/sharych/VelocityDM..."
+                           Foreground="{StaticResource TextSecondaryBrush}"
+                           FontSize="12"
+                           TextWrapping="Wrap" />
+                <TextBlock x:Name="ChromeHintText"
+                           Text="After restart, Chrome extension files are updated automatically (click Reload in chrome://extensions if already loaded)."
+                           Foreground="{StaticResource TextSecondaryBrush}"
+                           FontSize="11"
+                           TextWrapping="Wrap"
+                           IsVisible="False"
+                           Margin="0,2,0,0" />
+            </StackPanel>
+        </Border>
+
+        <TextBlock Grid.Row="2"
+                   Text="RELEASE NOTES"
+                   Foreground="{StaticResource TextSecondaryBrush}"
+                   FontSize="11"
+                   FontWeight="Bold"
+                   Margin="0,2,0,6" />
+
+        <TextBox Grid.Row="3"
+                 x:Name="ReleaseNotesTextBox"
+                 IsReadOnly="True"
+                 AcceptsReturn="True"
+                 TextWrapping="Wrap"
+                 FontSize="12"
+                 Background="{StaticResource BgSurfaceBrush}"
+                 BorderBrush="{StaticResource BorderBrushSubtle}"
+                 ScrollViewer.VerticalScrollBarVisibility="Auto" />
+
+        <StackPanel Grid.Row="4"
+                    x:Name="ProgressPanel"
+                    Spacing="6"
+                    Margin="0,12,0,0"
+                    IsVisible="True">
+            <ProgressBar x:Name="UpdateProgressBar"
+                         Minimum="0"
+                         Maximum="100"
+                         Height="8"
+                         IsIndeterminate="True"
+                         Background="{StaticResource BgSurfaceBrush}"
+                         Foreground="{StaticResource AccentCyanBrush}" />
+            <TextBlock x:Name="StatusText"
+                       Text="Connecting to GitHub..."
+                       Foreground="{StaticResource TextSecondaryBrush}"
+                       FontSize="12"
+                       TextWrapping="Wrap" />
+        </StackPanel>
+
+        <DockPanel Grid.Row="5" Margin="0,16,0,0" LastChildFill="False">
+            <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" Spacing="8">
+                <Button x:Name="OpenGitHubButton"
+                        Content="Open on GitHub"
+                        Classes="toolbar"
+                        IsVisible="False"
+                        Click="OpenGitHub_Click" />
+                <Button x:Name="SkipVersionButton"
+                        Content="Skip This Version"
+                        Classes="toolbar"
+                        IsVisible="False"
+                        Click="SkipVersion_Click" />
+                <Button x:Name="RecheckButton"
+                        Content="Check Again"
+                        Classes="toolbar"
+                        IsVisible="False"
+                        Click="Recheck_Click" />
+            </StackPanel>
+
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="10">
+                <Button x:Name="CloseOrCancelButton"
+                        Content="Close"
+                        Classes="toolbar"
+                        MinWidth="90"
+                        IsCancel="True"
+                        Click="CloseOrCancel_Click" />
+                <Button x:Name="InstallUpdateButton"
+                        Content="Update &amp; Restart Now"
+                        Classes="primary"
+                        IsVisible="False"
+                        Click="InstallUpdate_Click" />
+            </StackPanel>
+        </DockPanel>
+    </Grid>
+</Window>

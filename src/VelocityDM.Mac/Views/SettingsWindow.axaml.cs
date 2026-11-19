@@ -11,6 +11,7 @@ namespace VelocityDM.Mac.Views;
 public partial class SettingsWindow : Window
 {
     private readonly AppSettings _settings;
+    private readonly Action? _openUpdatesAction;
 
     public AppSettings? UpdatedSettings { get; private set; }
 
@@ -18,10 +19,11 @@ public partial class SettingsWindow : Window
     {
     }
 
-    public SettingsWindow(AppSettings currentSettings)
+    public SettingsWindow(AppSettings currentSettings, Action? openUpdatesAction = null)
     {
         InitializeComponent();
         _settings = currentSettings.Clone();
+        _openUpdatesAction = openUpdatesAction;
 
         DefaultFolderTextBox.Text = _settings.DefaultDownloadDirectory;
         CategorizeCheckBox.IsChecked = _settings.CategorizeIntoSubfolders;
@@ -39,6 +41,10 @@ public partial class SettingsWindow : Window
 
         AutoStartBrowserCheckBox.IsChecked = _settings.AutoStartBrowserDownloads;
         BridgePortTextBox.Text = _settings.BrowserBridgePort.ToString();
+
+        AutoCheckUpdatesCheckBox.IsChecked = _settings.AutoCheckForUpdates;
+        CurrentVersionText.Text = $"Installed version: v{GitHubUpdateService.FormatShortVersion(GitHubUpdateService.GetCurrentVersion())}";
+        CheckUpdatesButton.IsEnabled = _openUpdatesAction != null;
     }
 
     private void ConnectionsSlider_ValueChanged(object? sender, RangeBaseValueChangedEventArgs e)
@@ -93,6 +99,11 @@ public partial class SettingsWindow : Window
         await win.ShowDialog<bool>(this);
     }
 
+    private void CheckUpdates_Click(object? sender, RoutedEventArgs e)
+    {
+        _openUpdatesAction?.Invoke();
+    }
+
     private void Cancel_Click(object? sender, RoutedEventArgs e) => Close(false);
 
     private void Save_Click(object? sender, RoutedEventArgs e)
@@ -129,6 +140,7 @@ public partial class SettingsWindow : Window
 
         _settings.AutoStartBrowserDownloads = AutoStartBrowserCheckBox.IsChecked == true;
         _settings.BrowserBridgePort = port;
+        _settings.AutoCheckForUpdates = AutoCheckUpdatesCheckBox.IsChecked == true;
 
         _settings.Normalize();
         MacBrowserRegistrationService.SetMacLoginStartup(_settings.LaunchAtWindowsStartup);

@@ -55,6 +55,10 @@ public sealed class AppSettings
 
     public bool AutoStartBrowserDownloads { get; set; } = false;
 
+    public bool AutoCheckForUpdates { get; set; } = true;
+
+    public string? SkippedUpdateVersion { get; set; }
+
     public long TorrentDownloadSpeedLimitBytesPerSec { get; set; } = 0;
 
     public long TorrentUploadSpeedLimitBytesPerSec { get; set; } = 0;
@@ -84,6 +88,8 @@ public sealed class AppSettings
         LaunchAtWindowsStartup = LaunchAtWindowsStartup,
         BrowserBridgePort = BrowserBridgePort,
         AutoStartBrowserDownloads = AutoStartBrowserDownloads,
+        AutoCheckForUpdates = AutoCheckForUpdates,
+        SkippedUpdateVersion = SkippedUpdateVersion,
         TorrentDownloadSpeedLimitBytesPerSec = TorrentDownloadSpeedLimitBytesPerSec,
         TorrentUploadSpeedLimitBytesPerSec = TorrentUploadSpeedLimitBytesPerSec,
         TorrentMaxConnections = TorrentMaxConnections,

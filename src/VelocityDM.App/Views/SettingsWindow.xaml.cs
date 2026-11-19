@@ -10,13 +10,15 @@ namespace VelocityDM.App.Views;
 public partial class SettingsWindow : Window
 {
     private readonly AppSettings _settings;
+    private readonly Action? _openUpdatesAction;
 
     public AppSettings? UpdatedSettings { get; private set; }
 
-    public SettingsWindow(AppSettings currentSettings)
+    public SettingsWindow(AppSettings currentSettings, Action? openUpdatesAction = null)
     {
         InitializeComponent();
         _settings = currentSettings.Clone();
+        _openUpdatesAction = openUpdatesAction;
 
         DefaultFolderTextBox.Text = _settings.DefaultDownloadDirectory;
         CategorizeCheckBox.IsChecked = _settings.CategorizeIntoSubfolders;
@@ -39,6 +41,10 @@ public partial class SettingsWindow : Window
         TorrentUlLimitTextBox.Text = (_settings.TorrentUploadSpeedLimitBytesPerSec / 1024).ToString();
         TorrentMaxConnTextBox.Text = _settings.TorrentMaxConnections.ToString();
         StopSeedingCheckBox.IsChecked = _settings.StopSeedingWhenComplete;
+
+        AutoCheckUpdatesCheckBox.IsChecked = _settings.AutoCheckForUpdates;
+        CurrentVersionText.Text = $"Installed version: v{GitHubUpdateService.FormatShortVersion(GitHubUpdateService.GetCurrentVersion())}";
+        CheckUpdatesButton.IsEnabled = _openUpdatesAction != null;
     }
 
     private void ConnectionsSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -100,6 +106,11 @@ public partial class SettingsWindow : Window
         win.ShowDialog();
     }
 
+    private void CheckUpdates_Click(object sender, RoutedEventArgs e)
+    {
+        _openUpdatesAction?.Invoke();
+    }
+
     private void Save_Click(object sender, RoutedEventArgs e)
     {
         if (!long.TryParse(SpeedLimitKbTextBox.Text.Trim(), out long kbPerSec) || kbPerSec < 0)
@@ -149,6 +160,7 @@ public partial class SettingsWindow : Window
         _settings.TorrentUploadSpeedLimitBytesPerSec = tUlKb * 1024L;
         _settings.TorrentMaxConnections = tConn;
         _settings.StopSeedingWhenComplete = StopSeedingCheckBox.IsChecked == true;
+        _settings.AutoCheckForUpdates = AutoCheckUpdatesCheckBox.IsChecked == true;
 
         _settings.Normalize();
         BrowserRegistrationService.SetWindowsStartup(_settings.LaunchAtWindowsStartup);

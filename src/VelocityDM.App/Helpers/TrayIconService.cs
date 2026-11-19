@@ -19,6 +19,7 @@ public sealed class TrayIconService : IDisposable
     public event Action? AddTorrentRequested;
     public event Action? PauseAllRequested;
     public event Action? ResumeAllRequested;
+    public event Action? CheckUpdatesRequested;
     public event Action<bool>? ClipboardToggleRequested;
     public event Action? ExitRequested;
 
@@ -55,6 +56,8 @@ public sealed class TrayIconService : IDisposable
         };
         _clipboardMenuItem.Click += (_, _) => ClipboardToggleRequested?.Invoke(_clipboardMenuItem.Checked);
         menu.Items.Add(_clipboardMenuItem);
+        menu.Items.Add(new WinForms.ToolStripSeparator());
+        menu.Items.Add("Check for Updates...", null, (_, _) => CheckUpdatesRequested?.Invoke());
 
         menu.Items.Add(new WinForms.ToolStripSeparator());
         menu.Items.Add("Exit VelocityDM", null, (_, _) => ExitRequested?.Invoke());

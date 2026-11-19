@@ -74,6 +74,23 @@
                             Click="ChromeSetup_Click" />
                 </Grid>
 
+                <TextBlock Text="UPDATES" Foreground="{StaticResource AccentCyanBrush}" FontWeight="Bold" FontSize="11" Margin="0,6,0,0" />
+                <Grid ColumnDefinitions="*,Auto">
+                    <StackPanel Grid.Column="0" Spacing="6">
+                        <CheckBox x:Name="AutoCheckUpdatesCheckBox"
+                                  Content="Automatically check GitHub for updates and show a popup when available" />
+                        <TextBlock x:Name="CurrentVersionText"
+                                   Foreground="{StaticResource TextSecondaryBrush}"
+                                   FontSize="12" />
+                    </StackPanel>
+                    <Button x:Name="CheckUpdatesButton"
+                            Grid.Column="1"
+                            Content="Check for Updates..."
+                            VerticalAlignment="Center"
+                            Classes="toolbar"
+                            Click="CheckUpdates_Click" />
+                </Grid>
+
                 <TextBlock x:Name="ValidationErrorText" Foreground="{StaticResource DangerBrush}" FontSize="12" TextWrapping="Wrap" />
             </StackPanel>
         </ScrollViewer>

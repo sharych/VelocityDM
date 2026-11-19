@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "VelocityDM Download Integrator",
-  "version": "2.3.2",
+  "version": "2.4.0",
   "description": "Automatically send Chrome downloads and links directly to VelocityDM for multi-segment parallel downloading.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAyJ6Jdeo9zz2T9/7LmV3xfLQ3Eo60wJBNtRDvvT5B5K8soEkp1BODcfkOA8zusMuBrVw0HyxnAtnUMUO0SqlL4g/J2FIPvWkKswzstuuRrC5Sd4FfWf/N0Q82H8qnXxuzO4IaUCaqstUGrLELTkALWZj89k2ozLDbH4fioDREdV3GT/NnULtFcEt2l97lyMwYTa9PuPctmOSkF1rezCTZQTXrzKapOKHyrh1+DszEwj1vF98actp5PjN1MeguwHLA1PARYgtwboZM5sJVvZ0jrb+jsAbYwyIhclWsaPyDf60Mq1NDb7qRGNlhhiQU7GbvviFZWh4KwwGh9VZ8muyrCQIDAQAB",
   "icons": {
